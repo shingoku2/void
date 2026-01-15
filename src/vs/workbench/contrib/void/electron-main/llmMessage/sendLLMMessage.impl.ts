@@ -649,6 +649,29 @@ const ollamaList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOf
 	}
 }
 
+const ollamaHealthCheck = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider }: ServiceProviderHealthCheckParams) => {
+	const onSuccess = ({ message }: { message: string }) => {
+		onSuccess_({ message })
+	}
+	const onError = ({ error }: { error: string }) => {
+		onError_({ error })
+	}
+	try {
+		const thisConfig = settingsOfProvider.ollama
+		const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
+		ollama.list()
+			.then((response) => {
+				onSuccess({ message: 'Connection successful' })
+			})
+			.catch((error) => {
+				onError({ error: `Could not connect to Ollama: ${error.message || error}` })
+			})
+	}
+	catch (error) {
+		onError({ error: error + '' })
+	}
+}
+
 const sendOllamaFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, modelName, _setAborter }: SendFIMParams_Internal) => {
 	const thisConfig = settingsOfProvider.ollama
 	const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
@@ -851,6 +874,7 @@ type CallFnOfProvider = {
 		sendChat: (params: SendChatParams_Internal) => Promise<void>;
 		sendFIM: ((params: SendFIMParams_Internal) => void) | null;
 		list: ((params: ListParams_Internal<any>) => void) | null;
+		healthCheck: ((params: ServiceProviderHealthCheckParams) => void) | null;
 	}
 }
 
@@ -859,56 +883,67 @@ export const sendLLMMessageToProviderImplementation = {
 		sendChat: sendAnthropicChat,
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	openAI: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	xAI: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	gemini: {
 		sendChat: (params) => sendGeminiChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	mistral: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => sendMistralFIM(params),
 		list: null,
+		healthCheck: null,
 	},
 	ollama: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: sendOllamaFIM,
 		list: ollamaList,
+		healthCheck: ollamaHealthCheck,
 	},
 	openAICompatible: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params), // using openai's SDK is not ideal (your implementation might not do tools, reasoning, FIM etc correctly), talk to us for a custom integration
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
+		healthCheck: null,
 	},
 	openRouter: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
+		healthCheck: null,
 	},
 	vLLM: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: (params) => _openaiCompatibleList(params),
+		healthCheck: null,
 	},
 	deepseek: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	groq: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 
 	lmStudio: {
@@ -916,26 +951,31 @@ export const sendLLMMessageToProviderImplementation = {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: (params) => _openaiCompatibleList(params),
+		healthCheck: null,
 	},
 	liteLLM: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
+		healthCheck: null,
 	},
 	googleVertex: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	microsoftAzure: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 	awsBedrock: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+		healthCheck: null,
 	},
 
 } satisfies CallFnOfProvider

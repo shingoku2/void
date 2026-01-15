@@ -45,6 +45,13 @@ export class LLMMessageChannel implements IServerChannel {
 		}
 	}
 
+	// health check
+	private readonly healthCheckEmitters = {
+		success: new Emitter<EventProviderHealthCheckOnSuccessParams>(),
+		error: new Emitter<EventProviderHealthCheckOnErrorParams>(),
+	}
+
+
 	// stupidly, channels can't take in @IService
 	constructor(
 		private readonly metricsService: IMetricsService,
@@ -61,6 +68,9 @@ export class LLMMessageChannel implements IServerChannel {
 		else if (event === 'onError_list_ollama') return this.listEmitters.ollama.error.event;
 		else if (event === 'onSuccess_list_openAICompatible') return this.listEmitters.openaiCompat.success.event;
 		else if (event === 'onError_list_openAICompatible') return this.listEmitters.openaiCompat.error.event;
+		// health check
+		else if (event === 'onSuccess_providerHealthCheck') return this.healthCheckEmitters.success.event;
+		else if (event === 'onError_providerHealthCheck') return this.healthCheckEmitters.error.event;
 
 		else throw new Error(`Event not found: ${event}`);
 	}
@@ -79,6 +89,9 @@ export class LLMMessageChannel implements IServerChannel {
 			}
 			else if (command === 'openAICompatibleList') {
 				this._callOpenAICompatibleList(params)
+			}
+			else if (command === 'providerHealthCheck') {
+				this._callProviderHealthCheck(params)
 			}
 			else {
 				throw new Error(`Void sendLLM: command "${command}" not recognized.`)
@@ -150,7 +163,22 @@ export class LLMMessageChannel implements IServerChannel {
 	}
 
 
+	_callProviderHealthCheck = (params: MainProviderHealthCheckParams) => {
+		const { requestId, providerName } = params
+		const emitters = this.healthCheckEmitters
+		const mainThreadParams: ServiceProviderHealthCheckParams = {
+			...params,
+			onSuccess: (p) => { emitters.success.fire({ requestId, ...p }); },
+			onError: (p) => { emitters.error.fire({ requestId, ...p }); },
+		}
 
+		const implementation = sendLLMMessageToProviderImplementation[providerName].healthCheck
+		if (implementation) {
+			implementation(mainThreadParams)
+		} else {
+			emitters.error.fire({ requestId, error: `Health check not implemented for provider ${providerName}.` })
+		}
+	}
 
 
 }

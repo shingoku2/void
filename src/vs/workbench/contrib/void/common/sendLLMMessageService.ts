@@ -24,6 +24,7 @@ export interface ILLMMessageService {
 	abort: (requestId: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	providerHealthCheck: (params: ServiceProviderHealthCheckParams) => void;
 }
 
 
@@ -56,6 +57,12 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			success: { [eventId: string]: ((params: EventModelListOnSuccessParams<any>) => void) },
 			error: { [eventId: string]: ((params: EventModelListOnErrorParams<any>) => void) },
 		}
+	}
+
+	// health check hooks
+	private readonly healthCheckHooks = {
+		success: {} as { [eventId: string]: ((params: EventProviderHealthCheckOnSuccessParams) => void) },
+		error: {} as { [eventId: string]: ((params: EventProviderHealthCheckOnErrorParams) => void) },
 	}
 
 	constructor(
@@ -96,6 +103,13 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		}))
 		this._register((this.channel.listen('onError_list_openAICompatible') satisfies Event<EventModelListOnErrorParams<OpenaiCompatibleModelResponse>>)(e => {
 			this.listHooks.openAICompat.error[e.requestId]?.(e)
+		}))
+		// health check
+		this._register((this.channel.listen('onSuccess_providerHealthCheck') satisfies Event<EventProviderHealthCheckOnSuccessParams>)(e => {
+			this.healthCheckHooks.success[e.requestId]?.(e)
+		}))
+		this._register((this.channel.listen('onError_providerHealthCheck') satisfies Event<EventProviderHealthCheckOnErrorParams>)(e => {
+			this.healthCheckHooks.error[e.requestId]?.(e)
 		}))
 
 	}
@@ -182,6 +196,22 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 
+
+	providerHealthCheck = (params: ServiceProviderHealthCheckParams) => {
+		const { onSuccess, onError, ...proxyParams } = params
+
+		// add state for request id
+		const requestId = generateUuid();
+		this.healthCheckHooks.success[requestId] = onSuccess
+		this.healthCheckHooks.error[requestId] = onError
+
+		this.channel.call('providerHealthCheck', {
+			...proxyParams,
+			requestId,
+		} satisfies MainProviderHealthCheckParams)
+	}
+
+
 	private _clearChannelHooks(requestId: string) {
 		delete this.llmMessageHooks.onText[requestId]
 		delete this.llmMessageHooks.onFinalMessage[requestId]
@@ -192,6 +222,9 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		delete this.listHooks.openAICompat.success[requestId]
 		delete this.listHooks.openAICompat.error[requestId]
+
+		delete this.healthCheckHooks.success[requestId]
+		delete this.healthCheckHooks.error[requestId]
 	}
 }
 

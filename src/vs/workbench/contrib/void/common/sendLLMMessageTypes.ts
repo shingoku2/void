@@ -211,5 +211,18 @@ export type EventModelListOnSuccessParams<modelResponse> = Parameters<ModelListP
 export type EventModelListOnErrorParams<modelResponse> = Parameters<ModelListParams<modelResponse>['onError']>[0] & { requestId: string }
 
 
+// Health Check
+export type ServiceProviderHealthCheckParams = {
+	providerName: ProviderName;
+	onSuccess: (param: { message: string }) => void;
+	onError: (param: { error: any }) => void;
+}
+
+export type MainProviderHealthCheckParams = Omit<ServiceProviderHealthCheckParams, 'onSuccess' | 'onError'> & { requestId: string }
+
+export type EventProviderHealthCheckOnSuccessParams = { requestId: string; message: string; }
+export type EventProviderHealthCheckOnErrorParams = { requestId: string; error: any; }
+
+
 
 
