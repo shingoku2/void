@@ -17,10 +17,10 @@ pm outdated\ and \cargo outdated\ (if available) or check versions manually.
 - [ ] Task: Conductor - User Manual Verification 'Backend Implementation (Health Check)' (Protocol in workflow.md)
 
 ## Phase 3: Frontend Implementation (UI)
-- [ ] Task: Add "Test Connection" button to Ollama settings.
-    - [ ] Subtask: Write component test for the button interaction.
-    - [ ] Subtask: Add the button to the React settings component.
-- [ ] Task: Display connection status/toast notification.
-    - [ ] Subtask: Write test for status display state.
-    - [ ] Subtask: Implement logic to call the backend IPC and show success/error state.
+- [x] Task: Add "Test Connection" button to Ollama settings. 0ede56a
+    - [x] Subtask: Write component test for the button interaction. 0ede56a
+    - [x] Subtask: Add the button to the React settings component. 0ede56a
+- [x] Task: Display connection status/toast notification. 0ede56a
+    - [x] Subtask: Write test for status display state. 0ede56a
+    - [x] Subtask: Implement logic to call the backend IPC and show success/error state. 0ede56a
 - [ ] Task: Conductor - User Manual Verification 'Frontend Implementation (UI)' (Protocol in workflow.md)
