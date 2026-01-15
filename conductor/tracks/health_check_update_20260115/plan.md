@@ -7,7 +7,7 @@ pm outdated\ and \cargo outdated\ (if available) or check versions manually.
     - [ ] Subtask: Document findings in a new file \conductor/audit_report.md\.
 - [ ] Task: Conductor - User Manual Verification 'Dependency & Update Analysis' (Protocol in workflow.md)
 
-## Phase 2: Backend Implementation (Health Check)
+## Phase 2: Backend Implementation (Health Check) [checkpoint: 127954f]
 - [x] Task: Implement \`checkOllamaConnection\` function in the main process. 0ba379f
     - [x] Subtask: Write unit test for the connection logic (mocking the HTTP request). 0ba379f
     - [x] Subtask: Implement the function to hit \http://localhost:11434/api/tags\ (or root) to verify status. 0ba379f
