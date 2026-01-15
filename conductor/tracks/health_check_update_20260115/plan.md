@@ -8,12 +8,12 @@ pm outdated\ and \cargo outdated\ (if available) or check versions manually.
 - [ ] Task: Conductor - User Manual Verification 'Dependency & Update Analysis' (Protocol in workflow.md)
 
 ## Phase 2: Backend Implementation (Health Check)
-- [ ] Task: Implement \checkOllamaConnection\ function in the main process.
-    - [ ] Subtask: Write unit test for the connection logic (mocking the HTTP request).
-    - [ ] Subtask: Implement the function to hit \http://localhost:11434/api/tags\ (or root) to verify status.
-- [ ] Task: Expose the health check via IPC to the renderer.
-    - [ ] Subtask: Write unit test for the IPC handler.
-    - [ ] Subtask: Register the IPC handler in \electron-main\.
+- [x] Task: Implement \`checkOllamaConnection\` function in the main process. 0ba379f
+    - [x] Subtask: Write unit test for the connection logic (mocking the HTTP request). 0ba379f
+    - [x] Subtask: Implement the function to hit \http://localhost:11434/api/tags\ (or root) to verify status. 0ba379f
+- [x] Task: Expose the health check via IPC to the renderer. 0ba379f
+    - [x] Subtask: Write unit test for the IPC handler. 0ba379f
+    - [x] Subtask: Register the IPC handler in \electron-main\. 0ba379f
 - [ ] Task: Conductor - User Manual Verification 'Backend Implementation (Health Check)' (Protocol in workflow.md)
 
 ## Phase 3: Frontend Implementation (UI)
