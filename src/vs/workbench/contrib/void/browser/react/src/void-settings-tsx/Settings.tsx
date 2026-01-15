@@ -95,6 +95,54 @@ const RefreshModelButton = ({ providerName }: { providerName: RefreshableProvide
 	/>
 }
 
+const HealthCheckButton = ({ providerName }: { providerName: ProviderName }) => {
+
+	const accessor = useAccessor()
+	const llmMessageService = accessor.get('ILLMMessageService')
+	const metricsService = accessor.get('IMetricsService')
+
+	const [status, setStatus] = useState<null | 'loading' | 'success' | 'error'>(null)
+	const [message, setMessage] = useState<string | null>(null)
+
+	const onClick = useCallback(() => {
+		setStatus('loading')
+		llmMessageService.providerHealthCheck({
+			providerName,
+			onSuccess: (p) => {
+				setStatus('success')
+				setMessage(p.message)
+				setTimeout(() => { setStatus(null); setMessage(null); }, 3000)
+			},
+			onError: (e) => {
+				setStatus('error')
+				setMessage(e.error || 'Connection failed')
+				setTimeout(() => { setStatus(null); setMessage(null); }, 5000)
+			}
+		})
+		metricsService.capture('Click', { providerName, action: 'Health Check' })
+	}, [llmMessageService, metricsService, providerName])
+
+	const { title: providerTitle } = displayInfoOfProviderName(providerName)
+
+	return <ButtonLeftTextRightOption
+		leftButton={
+			<button
+				className='flex items-center'
+				disabled={status === 'loading'}
+				onClick={onClick}
+			>
+				{status === 'success' ? <Check className='stroke-green-500 size-3' />
+					: status === 'error' ? <X className='stroke-red-500 size-3' />
+						: status === 'loading' ? <Loader2 className='size-3 animate-spin' />
+							: <RefreshCw className='size-3' />}
+			</button>
+		}
+		text={status === 'success' ? 'Connection successful!'
+			: status === 'error' ? (message || 'Connection failed!')
+				: `Test connection to ${providerTitle}.`}
+	/>
+}
+
 const RefreshableModels = () => {
 	const settingsState = useSettingsState()
 
@@ -733,6 +781,8 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 						: <ChatMarkdownRender string={subTextMdOfProviderName(providerName)} chatMessageLocation={undefined} />}
 				/>
 			})}
+
+			{providerName === 'ollama' && <HealthCheckButton providerName={providerName} />}
 
 			{showProviderSuggestions && needsModel ?
 				providerName === 'ollama' ?
