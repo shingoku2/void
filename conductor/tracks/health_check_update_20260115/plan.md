@@ -16,7 +16,7 @@ pm outdated\ and \cargo outdated\ (if available) or check versions manually.
     - [x] Subtask: Register the IPC handler in \electron-main\. 0ba379f
 - [ ] Task: Conductor - User Manual Verification 'Backend Implementation (Health Check)' (Protocol in workflow.md)
 
-## Phase 3: Frontend Implementation (UI)
+## Phase 3: Frontend Implementation (UI) [checkpoint: c592e5b]
 - [x] Task: Add "Test Connection" button to Ollama settings. 0ede56a
     - [x] Subtask: Write component test for the button interaction. 0ede56a
     - [x] Subtask: Add the button to the React settings component. 0ede56a
