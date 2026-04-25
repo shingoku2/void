@@ -214,6 +214,7 @@ export type EventModelListOnErrorParams<modelResponse> = Parameters<ModelListPar
 // Health Check
 export type ServiceProviderHealthCheckParams = {
 	providerName: ProviderName;
+	settingsOfProvider: SettingsOfProvider;
 	onSuccess: (param: { message: string }) => void;
 	onError: (param: { error: any }) => void;
 }

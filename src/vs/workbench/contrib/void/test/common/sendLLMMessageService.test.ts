@@ -19,13 +19,13 @@ suite('LLMMessageService', () => {
 				if (event === 'onError_providerHealthCheck') return onErrorEmitter.event;
 				return new Emitter().event;
 			},
-			call: async (command: string, params: any) => {
+			call: (async (command: string, params: any) => {
 				if (command === 'providerHealthCheck') {
 					// Simulate main process responding via emitter
 					onSuccessEmitter.fire({ requestId: params.requestId, message: 'OK' });
 				}
 				return;
-			}
+			}) as IChannel['call']
 		};
 
 		const mockMainProcessService: Partial<IMainProcessService> = {
@@ -49,6 +49,7 @@ suite('LLMMessageService', () => {
 		let successResult: string | undefined;
 		service.providerHealthCheck({
 			providerName: 'ollama',
+			settingsOfProvider: mockVoidSettingsService.state!.settingsOfProvider,
 			onSuccess: (p) => {
 				successResult = p.message;
 			},
