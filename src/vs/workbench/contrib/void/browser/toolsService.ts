@@ -38,11 +38,13 @@ const validateStr = (argName: string, value: unknown) => {
 }
 
 
-// We are NOT checking to make sure in workspace
-const validateURI = (uriStr: unknown) => {
+// validateURI checks URI format and enforces workspace boundaries.
+// A malicious LLM could access files outside the workspace via paths like file:///etc/passwd.
+const validateURI = (uriStr: unknown, workspaceContextService: IWorkspaceContextService) => {
 	if (uriStr === null) throw new Error(`Invalid LLM output: uri was null.`)
 	if (typeof uriStr !== 'string') throw new Error(`Invalid LLM output format: Provided uri must be a string, but it's a(n) ${typeof uriStr}. Full value: ${JSON.stringify(uriStr)}.`)
 
+	let uri: URI;
 	// Check if it's already a full URI with scheme (e.g., vscode-remote://, file://, etc.)
 	// Look for :// pattern which indicates a scheme is present
 	// Examples of supported URIs:
@@ -53,8 +55,7 @@ const validateURI = (uriStr: unknown) => {
 	// - C:\Users\file.txt (Windows local path, will be converted to file://)
 	if (uriStr.includes('://')) {
 		try {
-			const uri = URI.parse(uriStr)
-			return uri
+			uri = URI.parse(uriStr)
 		} catch (e) {
 			// If parsing fails, it's a malformed URI
 			throw new Error(`Invalid URI format: ${uriStr}. Error: ${e}`)
@@ -62,14 +63,20 @@ const validateURI = (uriStr: unknown) => {
 	} else {
 		// No scheme present, treat as file path
 		// This handles regular file paths like /home/user/file.txt or C:\Users\file.txt
-		const uri = URI.file(uriStr)
-		return uri
+		uri = URI.file(uriStr)
 	}
+
+	// Enforce workspace boundaries - reject URIs outside the workspace
+	if (!workspaceContextService.isInsideWorkspace(uri)) {
+		throw new Error(`URI ${uri.fsPath} is outside the current workspace and cannot be accessed. Only files within the workspace boundaries are allowed.`)
+	}
+
+	return uri
 }
 
-const validateOptionalURI = (uriStr: unknown) => {
+const validateOptionalURI = (uriStr: unknown, workspaceContextService: IWorkspaceContextService) => {
 	if (isFalsy(uriStr)) return null
-	return validateURI(uriStr)
+	return validateURI(uriStr, workspaceContextService)
 }
 
 const validateOptionalStr = (argName: string, str: unknown) => {
@@ -154,12 +161,13 @@ export class ToolsService implements IToolsService {
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 	) {
+		const ws = workspaceContextService;
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
 		this.validateParams = {
 			read_file: (params: RawToolParamsObj) => {
 				const { uri: uriStr, start_line: startLineUnknown, end_line: endLineUnknown, page_number: pageNumberUnknown } = params
-				const uri = validateURI(uriStr)
+				const uri = validateURI(uriStr, ws)
 				const pageNumber = validatePageNum(pageNumberUnknown)
 
 				let startLine = validateNumber(startLineUnknown, { default: null })
@@ -173,13 +181,13 @@ export class ToolsService implements IToolsService {
 			ls_dir: (params: RawToolParamsObj) => {
 				const { uri: uriStr, page_number: pageNumberUnknown } = params
 
-				const uri = validateURI(uriStr)
+				const uri = validateURI(uriStr, ws)
 				const pageNumber = validatePageNum(pageNumberUnknown)
 				return { uri, pageNumber }
 			},
 			get_dir_tree: (params: RawToolParamsObj) => {
 				const { uri: uriStr, } = params
-				const uri = validateURI(uriStr)
+				const uri = validateURI(uriStr, ws)
 				return { uri }
 			},
 			search_pathnames_only: (params: RawToolParamsObj) => {
@@ -205,7 +213,7 @@ export class ToolsService implements IToolsService {
 				} = params
 				const queryStr = validateStr('query', queryUnknown)
 				const pageNumber = validatePageNum(pageNumberUnknown)
-				const searchInFolder = validateOptionalURI(searchInFolderUnknown)
+				const searchInFolder = validateOptionalURI(searchInFolderUnknown, ws)
 				const isRegex = validateBoolean(isRegexUnknown, { default: false })
 				return {
 					query: queryStr,
@@ -216,7 +224,7 @@ export class ToolsService implements IToolsService {
 			},
 			search_in_file: (params: RawToolParamsObj) => {
 				const { uri: uriStr, query: queryUnknown, is_regex: isRegexUnknown } = params;
-				const uri = validateURI(uriStr);
+				const uri = validateURI(uriStr, ws);
 				const query = validateStr('query', queryUnknown);
 				const isRegex = validateBoolean(isRegexUnknown, { default: false });
 				return { uri, query, isRegex };
@@ -226,7 +234,7 @@ export class ToolsService implements IToolsService {
 				const {
 					uri: uriUnknown,
 				} = params
-				const uri = validateURI(uriUnknown)
+				const uri = validateURI(uriUnknown, ws)
 				return { uri }
 			},
 
@@ -234,7 +242,7 @@ export class ToolsService implements IToolsService {
 
 			create_file_or_folder: (params: RawToolParamsObj) => {
 				const { uri: uriUnknown } = params
-				const uri = validateURI(uriUnknown)
+				const uri = validateURI(uriUnknown, ws)
 				const uriStr = validateStr('uri', uriUnknown)
 				const isFolder = checkIfIsFolder(uriStr)
 				return { uri, isFolder }
@@ -242,7 +250,7 @@ export class ToolsService implements IToolsService {
 
 			delete_file_or_folder: (params: RawToolParamsObj) => {
 				const { uri: uriUnknown, is_recursive: isRecursiveUnknown } = params
-				const uri = validateURI(uriUnknown)
+				const uri = validateURI(uriUnknown, ws)
 				const isRecursive = validateBoolean(isRecursiveUnknown, { default: false })
 				const uriStr = validateStr('uri', uriUnknown)
 				const isFolder = checkIfIsFolder(uriStr)
@@ -251,14 +259,14 @@ export class ToolsService implements IToolsService {
 
 			rewrite_file: (params: RawToolParamsObj) => {
 				const { uri: uriStr, new_content: newContentUnknown } = params
-				const uri = validateURI(uriStr)
+				const uri = validateURI(uriStr, ws)
 				const newContent = validateStr('newContent', newContentUnknown)
 				return { uri, newContent }
 			},
 
 			edit_file: (params: RawToolParamsObj) => {
 				const { uri: uriStr, search_replace_blocks: searchReplaceBlocksUnknown } = params
-				const uri = validateURI(uriStr)
+				const uri = validateURI(uriStr, ws)
 				const searchReplaceBlocks = validateStr('searchReplaceBlocks', searchReplaceBlocksUnknown)
 				return { uri, searchReplaceBlocks }
 			},

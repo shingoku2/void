@@ -1218,11 +1218,11 @@ We only need to do it for files that were edited since `from`, ie files between 
 			})
 		}
 
-		p.then(() => {
+		return p.then(() => {
 			if (threadId !== this.state.currentThreadId) notify({ error: null })
 		}).catch((e) => {
 			if (threadId !== this.state.currentThreadId) notify({ error: getErrorMessage(e) })
-			throw e
+			throw new Error(`_wrapRunAgentToNotify error: ${getErrorMessage(e)}`)
 		})
 	}
 

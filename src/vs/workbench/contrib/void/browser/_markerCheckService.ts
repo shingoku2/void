@@ -23,6 +23,7 @@ export const IMarkerCheckService = createDecorator<IMarkerCheckService>('markerC
 
 class MarkerCheckService extends Disposable implements IMarkerCheckService {
 	_serviceBrand: undefined;
+	private _intervalId: number | undefined;
 
 	constructor(
 		@IMarkerService private readonly _markerService: IMarkerService,
@@ -98,7 +99,15 @@ class MarkerCheckService extends Disposable implements IMarkerCheckService {
 			}
 		}
 		const { window } = dom.getActiveWindow()
-		window.setInterval(check, 5000);
+		this._intervalId = window.setInterval(check, 5000);
+	}
+
+	override dispose(): void {
+		if (this._intervalId !== undefined) {
+			const { window } = dom.getActiveWindow()
+			window.clearInterval(this._intervalId);
+		}
+		super.dispose();
 	}
 
 

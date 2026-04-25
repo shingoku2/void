@@ -161,8 +161,8 @@ class ExtensionTransferService extends Disposable implements IExtensionTransferS
 							const jsonStr = JSON.stringify(j2)
 							await fileService.writeFile(child.resource, VSBuffer.fromString(jsonStr))
 						}
-						catch {
-							console.log('Error copying extensions.json, skipping')
+						catch (e) {
+							console.error('Error parsing extensions.json:', e)
 						}
 					}
 				}

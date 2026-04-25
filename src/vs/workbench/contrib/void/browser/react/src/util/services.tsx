@@ -332,14 +332,14 @@ export const useRefreshModelListener = (listener: (providerName: RefreshableProv
 	useEffect(() => {
 		refreshModelProviderListeners.add(listener)
 		return () => { refreshModelProviderListeners.delete(listener) }
-	}, [listener, refreshModelProviderListeners])
+	}, [listener])
 }
 
 export const useCtrlKZoneStreamingState = (listener: (diffareaid: number, s: boolean) => void) => {
 	useEffect(() => {
 		ctrlKZoneStreamingStateListeners.add(listener)
 		return () => { ctrlKZoneStreamingStateListeners.delete(listener) }
-	}, [listener, ctrlKZoneStreamingStateListeners])
+	}, [listener])
 }
 
 export const useIsDark = () => {

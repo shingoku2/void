@@ -13,18 +13,16 @@ suite('LLMMessageService', () => {
 		const onSuccessEmitter = new Emitter<any>();
 		const onErrorEmitter = new Emitter<any>();
 
-		const mockChannel: Partial<IChannel> = {
+		const mockChannel = {
 			listen: (event: string) => {
 				if (event === 'onSuccess_providerHealthCheck') return onSuccessEmitter.event;
 				if (event === 'onError_providerHealthCheck') return onErrorEmitter.event;
 				return new Emitter().event;
 			},
-			call: async (command: string, params: any) => {
-				if (command === 'providerHealthCheck') {
-					// Simulate main process responding via emitter
-					onSuccessEmitter.fire({ requestId: params.requestId, message: 'OK' });
-				}
-				return;
+			call: async (_command: string, _params: any): Promise<unknown> => {
+				// Simulate main process responding via emitter
+				onSuccessEmitter.fire({ requestId: 'test-request-id', message: 'OK' });
+				return undefined;
 			}
 		};
 
@@ -49,6 +47,7 @@ suite('LLMMessageService', () => {
 		let successResult: string | undefined;
 		service.providerHealthCheck({
 			providerName: 'ollama',
+			settingsOfProvider: {} as any,
 			onSuccess: (p) => {
 				successResult = p.message;
 			},

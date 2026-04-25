@@ -709,6 +709,24 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 		r.style.height = `${newHeight}px`
 	}, []);
 
+	// debounced version to avoid excessive RAF calls during rapid content changes
+	const adjustHeightRAFRef = useRef<number | null>(null)
+	const adjustHeightDebounced = useCallback(() => {
+		if (adjustHeightRAFRef.current !== null) return
+		adjustHeightRAFRef.current = requestAnimationFrame(() => {
+			adjustHeightRAFRef.current = null
+			adjustHeight()
+		})
+	}, [adjustHeight])
+
+	useEffect(() => {
+		return () => {
+			if (adjustHeightRAFRef.current !== null) {
+				cancelAnimationFrame(adjustHeightRAFRef.current)
+			}
+		}
+	}, [])
+
 
 
 	const fns: TextAreaFns = useMemo(() => ({

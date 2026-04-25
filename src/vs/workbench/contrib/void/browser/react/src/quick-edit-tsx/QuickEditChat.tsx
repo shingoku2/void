@@ -9,7 +9,7 @@ import { TextAreaFns, VoidInputBox2 } from '../util/inputs.js';
 import { QuickEditPropsType } from '../../../quickEditActions.js';
 import { ButtonStop, ButtonSubmit, IconX, VoidChatArea } from '../sidebar-tsx/SidebarChat.js';
 import { VOID_CTRL_K_ACTION_ID } from '../../../actionIDs.js';
-import { useRefState } from '../util/helpers.js';
+import { useRefState, useDebounce } from '../util/helpers.js';
 import { isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 
 
@@ -34,12 +34,24 @@ export const QuickEditChat = ({
 		if (!inputContainer) return;
 		// only observing 1 element
 		let resizeObserver: ResizeObserver | undefined
+		let debounceTimer: number | null = null
 		resizeObserver = new ResizeObserver((entries) => {
 			const height = entries[0].borderBoxSize[0].blockSize
-			onChangeHeight(height)
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer)
+			}
+			debounceTimer = window.setTimeout(() => {
+				onChangeHeight(height)
+				debounceTimer = null
+			}, 100)
 		})
 		resizeObserver.observe(inputContainer);
-		return () => { resizeObserver?.disconnect(); };
+		return () => {
+			resizeObserver?.disconnect()
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer)
+			}
+		}
 	}, [onChangeHeight]);
 
 

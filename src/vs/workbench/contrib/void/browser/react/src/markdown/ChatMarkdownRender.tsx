@@ -15,6 +15,8 @@ import { separateOutFirstLine } from '../../../../common/helpers/util.js'
 import { BlockCode } from '../util/inputs.js'
 import { CodespanLocationLink } from '../../../../common/chatThreadServiceTypes.js'
 import { getBasename, getRelative, voidOpenFileFn } from '../sidebar-tsx/SidebarChat.js'
+import dompurify from '../../../../../../../base/browser/dompurify/dompurify.js'
+import { Schemas } from '../../../../../../../base/common/network.js'
 
 
 export type ChatMessageLocation = {
@@ -30,6 +32,67 @@ export const getApplyBoxId = ({ threadId, messageIdx, tokenIdx }: ApplyBoxLocati
 
 function isValidUri(s: string): boolean {
 	return s.length > 5 && isAbsolute(s) && !s.includes('//') && !s.includes('/*') // common case that is a false positive is comments like //
+}
+
+/**
+ * Sanitizes a URL to prevent XSS attacks.
+ * Returns the sanitized URL or null if the URL is invalid/unsafe.
+ */
+function sanitizeUrl(url: string): string | null {
+	if (!url) return null;
+
+	// Use DOMPurify's sanitize to clean the URL
+	const sanitized = dompurify.sanitize(url, { RETURN_TRUSTED_TYPE: true });
+
+	// Create an anchor element to validate the protocol
+	const anchor = document.createElement('a');
+	anchor.href = sanitized;
+
+	// Check that the URL uses an allowed protocol (http/https only for security)
+	// If the URL is relative, anchor.protocol will be the current page's protocol
+	// For markdown from LLMs, we want to restrict to http/https only
+	const allowedProtocols = ['https:', 'http:'];
+	if (!allowedProtocols.includes(anchor.protocol)) {
+		return null;
+	}
+
+	return anchor.href;
+}
+
+/**
+ * Sanitizes an image src URL to prevent XSS attacks.
+ * Images can also use data: URLs but only for safe image types.
+ */
+function sanitizeImageSrc(src: string): string | null {
+	if (!src) return null;
+
+	// Use DOMPurify's sanitize to clean the URL
+	const sanitized = dompurify.sanitize(src, { RETURN_TRUSTED_TYPE: true });
+
+	// Create an image element to validate the URL
+	const img = document.createElement('img');
+	img.src = sanitized;
+
+	// Only allow http/https or safe data: URLs (images only)
+	if (img.src.startsWith('data:')) {
+		// Only allow safe image MIME types in data URLs
+		const validImageTypes = ['image/png', 'image/gif', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+		const matches = sanitized.match(/^data:image\/([^;]+);/);
+		if (!matches || !validImageTypes.includes(`image/${matches[1]}`)) {
+			return null;
+		}
+		return img.src;
+	}
+
+	// For non-data URLs, validate protocols like sanitizeUrl
+	const anchor = document.createElement('a');
+	anchor.href = img.src;
+	const allowedProtocols = ['https:', 'http:'];
+	if (!allowedProtocols.includes(anchor.protocol)) {
+		return null;
+	}
+
+	return img.src;
 }
 
 // renders contiguous string of latex eg $e^{i\pi}$
@@ -482,10 +545,13 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	}
 
 	if (t.type === 'link') {
+		const sanitizedHref = sanitizeUrl(t.href)
+		if (!sanitizedHref) return <span className='text-red-500'>[invalid link]</span>
+
 		return (
 			<a
-				onClick={() => { window.open(t.href) }}
-				href={t.href}
+				onClick={() => { window.open(sanitizedHref) }}
+				href={sanitizedHref}
 				title={t.title ?? undefined}
 				className='underline cursor-pointer hover:brightness-90 transition-all duration-200 text-void-fg-2'
 			>
@@ -495,8 +561,11 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	}
 
 	if (t.type === 'image') {
+		const sanitizedSrc = sanitizeImageSrc(t.href)
+		if (!sanitizedSrc) return null
+
 		return <img
-			src={t.href}
+			src={sanitizedSrc}
 			alt={t.text}
 			title={t.title ?? undefined}
 

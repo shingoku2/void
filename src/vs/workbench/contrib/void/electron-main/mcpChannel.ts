@@ -17,6 +17,103 @@ import { MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, RawMCPToolCall, M
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MCPUserStateOfName } from '../common/voidSettingsTypes.js';
+import { isWindows } from '../../../../base/common/platform.js';
+
+// ============================================================================
+// Command Path Validation (Security: prevent arbitrary command execution)
+// ============================================================================
+
+const ALLOWED_COMMAND_PREFIXES: { unix: string[], windows: string[] } = {
+	unix: [
+		'/usr/bin/',
+		'/usr/local/bin/',
+		'/opt/',
+		'/usr/sbin/',
+		'/bin/',
+		'/sbin/',
+	],
+	windows: [
+		'C:\\Program Files\\',
+		'C:\\Program Files (x86)\\',
+		'C:\\Windows\\System32\\',
+		'C:\\Windows\\SysWOW64\\',
+		// Node.js common install locations
+		process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Programs\\` : '',
+		// npm global paths
+		'C:\\Users\\',
+	].filter(Boolean),
+};
+
+/**
+ * Validates that a command path is within allowed directories.
+ * Returns { valid: true } if safe, { valid: false, reason: string } if suspicious.
+ */
+function validateCommandPath(command: string): { valid: boolean; reason?: string } {
+	if (!command || command.trim() === '') {
+		return { valid: false, reason: 'Empty command path' };
+	}
+
+	// Check for path traversal attempts
+	if (command.includes('..') || command.includes('\\..') || command.includes('/..')) {
+		return { valid: false, reason: 'Path traversal detected in command' };
+	}
+
+	// Check for shell metacharacters that could be used for injection
+	const suspiciousChars = /[;&|`$]/;
+	if (suspiciousChars.test(command)) {
+		return { valid: false, reason: 'Suspicious shell metacharacters in command' };
+	}
+
+	const isUnix = !isWindows;
+
+	if (isUnix) {
+		// On Unix, check if command starts with an allowed prefix or is an absolute path in allowed dir
+		const matchesAllowedPrefix = ALLOWED_COMMAND_PREFIXES.unix.some(prefix =>
+			command.startsWith(prefix)
+		);
+		const isAbsoluteInAllowedDir = command.startsWith('/') && matchesAllowedPrefix;
+
+		if (matchesAllowedPrefix || isAbsoluteInAllowedDir) {
+			return { valid: true };
+		}
+
+		// Also allow commands that exist in PATH and are just the command name (no path)
+		// e.g., "node", "npx", "python3"
+		if (!command.includes('/') && !command.includes('\\')) {
+			return { valid: true };
+		}
+
+		return {
+			valid: false,
+			reason: `Command path "${command}" is not in allowed directories: ${ALLOWED_COMMAND_PREFIXES.unix.join(', ')}`
+		};
+	} else {
+		// On Windows, normalize path separators and check
+		const normalizedCommand = command.replace(/\//g, '\\').toLowerCase();
+
+		const matchesAllowedPrefix = ALLOWED_COMMAND_PREFIXES.windows.some(prefix =>
+			normalizedCommand.startsWith(prefix.toLowerCase())
+		);
+
+		if (matchesAllowedPrefix) {
+			return { valid: true };
+		}
+
+		// Allow relative commands (just command name without path)
+		if (!command.includes('\\') && !command.includes('/')) {
+			return { valid: true };
+		}
+
+		return {
+			valid: false,
+			reason: `Command path "${command}" is not in allowed directories on Windows`
+		};
+	}
+}
+
+// ============================================================================
+// End Command Path Validation
+// ============================================================================
 
 const getClientConfig = (serverName: string) => {
 	return {
@@ -33,10 +130,12 @@ type MCPServerError = MCPServer & { status: 'error' }
 
 type ClientInfo = {
 	_client: Client, // _client is the client that connects with an mcp client. We're calling mcp clients "server" everywhere except here for naming consistency.
+	_transport?: Transport, // stored so we can close it properly
 	mcpServerEntryJSON: MCPConfigFileEntryJSON,
 	mcpServer: MCPServerNonError,
 } | {
 	_client?: undefined,
+	_transport?: undefined,
 	mcpServerEntryJSON: MCPConfigFileEntryJSON,
 	mcpServer: MCPServerError,
 }
@@ -165,7 +264,7 @@ export class MCPChannel implements IServerChannel {
 
 		const clientConfig = getClientConfig(serverName)
 		const client = new Client(clientConfig)
-		let transport: Transport;
+		let transport: Transport | undefined;
 		let info: MCPServerNonError;
 
 		if (server.url) {
@@ -182,6 +281,14 @@ export class MCPChannel implements IServerChannel {
 					command: server.url.toString(),
 				}
 			} catch (httpErr) {
+				// Close the failed HTTP transport before trying SSE
+				if (transport) {
+					try {
+						await transport.close()
+					} catch (closeErr) {
+						console.warn(`Error closing failed HTTP transport for ${serverName}:`, closeErr)
+					}
+				}
 				console.warn(`HTTP failed for ${serverName}, trying SSE…`, httpErr);
 				transport = new SSEClientTransport(server.url);
 				await client.connect(transport);
@@ -195,6 +302,15 @@ export class MCPChannel implements IServerChannel {
 				}
 			}
 		} else if (server.command) {
+			// Validate command path before execution (security fix)
+			const validation = validateCommandPath(server.command);
+			if (!validation.valid) {
+				const error = new Error(`Security: Command path validation failed for "${server.command}": ${validation.reason}`);
+				console.error(`❌ Security: ${error.message}`);
+				throw error;
+			}
+			console.warn(`⚠️ MCP: Using stdio transport with command: ${server.command}`);
+
 			// console.log('ENV DATA: ', server.env)
 			transport = new StdioClientTransport({
 				command: server.command,
@@ -226,7 +342,7 @@ export class MCPChannel implements IServerChannel {
 		}
 
 
-		return { _client: client, mcpServerEntryJSON: server, mcpServer: info }
+		return { _client: client, _transport: transport, mcpServerEntryJSON: server, mcpServer: info }
 	}
 
 	private _addUniquePrefix(base: string) {
@@ -256,7 +372,15 @@ export class MCPChannel implements IServerChannel {
 	private async _closeClient(serverName: string) {
 		const info = this.infoOfClientId[serverName]
 		if (!info) return
-		const { _client: client } = info
+		const { _client: client, _transport: transport } = info
+		// Close the transport first (SSE/WebSocket connections)
+		if (transport) {
+			try {
+				await transport.close()
+			} catch (e) {
+				console.warn(`Error closing transport for ${serverName}:`, e)
+			}
+		}
 		if (client) {
 			await client.close()
 		}
@@ -389,6 +513,24 @@ export class MCPChannel implements IServerChannel {
 			}
 			return errorResponse
 		}
+	}
+
+	// ============================================================================
+	// Dispose / Cleanup
+	// ============================================================================
+
+	/**
+	 * Properly disposes of the MCPChannel, closing all server connections.
+	 * This should be called when the channel is no longer needed.
+	 */
+	async dispose(): Promise<void> {
+		console.log('Disposing MCPChannel, closing all connections...');
+		await this._closeAllMCPServers();
+		// Clear all emitters
+		this.mcpEmitters.serverEvent.onAdd.dispose();
+		this.mcpEmitters.serverEvent.onUpdate.dispose();
+		this.mcpEmitters.serverEvent.onDelete.dispose();
+		console.log('MCPChannel disposed successfully');
 	}
 }
 

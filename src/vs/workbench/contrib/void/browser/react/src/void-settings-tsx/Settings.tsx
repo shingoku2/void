@@ -103,20 +103,34 @@ const HealthCheckButton = ({ providerName }: { providerName: ProviderName }) => 
 
 	const [status, setStatus] = useState<null | 'loading' | 'success' | 'error'>(null)
 	const [message, setMessage] = useState<string | null>(null)
+	const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+	// Cleanup timeouts on unmount
+	useEffect(() => {
+		return () => {
+			if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
+			if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current)
+		}
+	}, [])
 
 	const onClick = useCallback(() => {
+		// Clear any pending timeouts before setting new state
+		if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
+		if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current)
+
 		setStatus('loading')
 		llmMessageService.providerHealthCheck({
 			providerName,
 			onSuccess: (p) => {
 				setStatus('success')
 				setMessage(p.message)
-				setTimeout(() => { setStatus(null); setMessage(null); }, 3000)
+				successTimeoutRef.current = setTimeout(() => { setStatus(null); setMessage(null); }, 3000)
 			},
 			onError: (e) => {
 				setStatus('error')
 				setMessage(e.error || 'Connection failed')
-				setTimeout(() => { setStatus(null); setMessage(null); }, 5000)
+				errorTimeoutRef.current = setTimeout(() => { setStatus(null); setMessage(null); }, 5000)
 			}
 		})
 		metricsService.capture('Click', { providerName, action: 'Health Check' })
@@ -438,6 +452,16 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 	const [modelName, setModelName] = useState<string>('');
 	const [errorString, setErrorString] = useState('');
 
+	// Ref to track the add model reset timeout
+	const addModelResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Cleanup timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (addModelResetTimeoutRef.current) clearTimeout(addModelResetTimeoutRef.current)
+		}
+	}, []);
+
 	// a dump of all the enabled providers' models
 	const modelDump: (VoidStatefulModelInfo & { providerName: ProviderName, providerEnabled: boolean })[] = []
 
@@ -472,9 +496,12 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 			return;
 		}
 
+		// Clear any pending timeout
+		if (addModelResetTimeoutRef.current) clearTimeout(addModelResetTimeoutRef.current)
+
 		settingsStateService.addModel(userChosenProviderName, modelName);
 		setShowCheckmark(true);
-		setTimeout(() => {
+		addModelResetTimeoutRef.current = setTimeout(() => {
 			setShowCheckmark(false);
 			setIsAddModelOpen(false);
 			setUserChosenProviderName(null);
@@ -936,10 +963,20 @@ export const OneClickSwitchButton = ({ fromEditor = 'VS Code', className = '' }:
 
 	const [transferState, setTransferState] = useState<{ type: 'done', error?: string } | { type: | 'loading' | 'justfinished' }>({ type: 'done' })
 
+	const transferDoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+	// Cleanup timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (transferDoneTimeoutRef.current) clearTimeout(transferDoneTimeoutRef.current)
+		}
+	}, [])
 
 	const onClick = async () => {
 		if (transferState.type !== 'done') return
+
+		// Clear any pending timeout
+		if (transferDoneTimeoutRef.current) clearTimeout(transferDoneTimeoutRef.current)
 
 		setTransferState({ type: 'loading' })
 
@@ -952,7 +989,7 @@ export const OneClickSwitchButton = ({ fromEditor = 'VS Code', className = '' }:
 		}
 		else {
 			setTransferState({ type: 'justfinished' })
-			setTimeout(() => { setTransferState({ type: 'done' }); }, 3000)
+			transferDoneTimeoutRef.current = setTimeout(() => { setTransferState({ type: 'done' }); }, 3000)
 		}
 	}
 

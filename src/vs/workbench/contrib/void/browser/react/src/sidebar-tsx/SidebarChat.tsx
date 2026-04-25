@@ -1044,6 +1044,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isDisabled, setIsDisabled] = useState(false)
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
+	// RAF debounce to avoid excessive scroll calls after every message edit
+	const scrollToBottomRafRef = useRef<number | null>(null)
 	// initialize on first render, and when edit was just enabled
 	const _mustInitialize = useRef(true)
 	const _justEnabledEdit = useRef(false)
@@ -1117,7 +1119,11 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				console.error('Error while editing message:', e)
 			}
 			await chatThreadsService.focusCurrentChat()
-			requestAnimationFrame(() => _scrollToBottom?.())
+			if (scrollToBottomRafRef.current !== null) return
+			scrollToBottomRafRef.current = requestAnimationFrame(() => {
+				_scrollToBottom?.()
+				scrollToBottomRafRef.current = null
+			})
 		}
 
 		const onAbort = async () => {
@@ -1802,16 +1808,29 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		}
 
 		// Listen for size changes of the container and keep the terminal layout in sync.
+		let debounceTimer: number | null = null
 		const resizeObserver = new ResizeObserver((entries) => {
 			const height = entries[0].borderBoxSize[0].blockSize;
 			const width = entries[0].borderBoxSize[0].inlineSize;
-			if (typeof terminal.layout === 'function') {
-				terminal.layout({ width, height });
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer)
 			}
+			debounceTimer = window.setTimeout(() => {
+				if (typeof terminal.layout === 'function') {
+					terminal.layout({ width, height });
+				}
+				debounceTimer = null
+			}, 100)
 		});
 
 		resizeObserver.observe(container);
-		return () => { terminal.detachFromElement(); resizeObserver?.disconnect(); }
+		return () => {
+			terminal.detachFromElement();
+			resizeObserver?.disconnect();
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer)
+			}
+		}
 	}
 
 	useEffect(() => {

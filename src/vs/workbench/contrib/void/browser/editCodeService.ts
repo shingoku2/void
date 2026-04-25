@@ -42,9 +42,8 @@ import { IEditCodeService, AddCtrlKOpts, StartApplyingOpts, CallBeforeStartApply
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName } from '../common/voidSettingsTypes.js';
 import { IVoidModelService } from '../common/voidModelService.js';
-import { deepClone } from '../../../../base/common/objects.js';
 import { acceptBg, acceptBorder, buttonFontSize, buttonTextColor, rejectBg, rejectBorder } from '../common/helpers/colors.js';
-import { DiffArea, Diff, CtrlKZone, VoidFileSnapshot, DiffAreaSnapshotEntry, diffAreaSnapshotKeys, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
+import { DiffArea, Diff, CtrlKZone, VoidFileSnapshot, DiffAreaSnapshotEntry, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 // import { isMacintosh } from '../../../../base/common/platform.js';
 // import { VOID_OPEN_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
@@ -163,6 +162,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	diffAreaOfId: Record<string, DiffArea> = {}; // diffareaId -> diffArea
 	diffOfId: Record<string, Diff> = {}; // diffid -> diff (redundant with diffArea._diffOfId)
 
+	// debounce map for full refresh on content change (user typing)
+	private _refreshDebounceTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
+
 	// events
 
 	// uri: diffZones  // listen on change diffZones
@@ -230,6 +232,41 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		for (let model of this._modelService.getModels()) { initializeModel(model) }
 		this._register(this._modelService.onModelAdded(model => { initializeModel(model) }));
 
+		// cleanup diffAreasOfURI, diffAreaOfId, diffOfId, and mostRecentTextOfCtrlKZoneId when a model is removed/closed
+		this._register(this._modelService.onModelRemoved(model => {
+			const fsPath = model.uri.fsPath
+			// clean up debounce timer
+			if (this._refreshDebounceTimers[fsPath]) {
+				clearTimeout(this._refreshDebounceTimers[fsPath])
+				delete this._refreshDebounceTimers[fsPath]
+			}
+			// clean up all diff areas for this URI
+			const diffAreaIds = this.diffAreasOfURI[fsPath]
+			if (diffAreaIds) {
+				for (const diffareaid of diffAreaIds) {
+					const diffArea = this.diffAreaOfId[diffareaid]
+					if (diffArea) {
+						// clean up diffOfId entries for DiffZones
+						if (diffArea.type === 'DiffZone') {
+							for (const diffid in diffArea._diffOfId) {
+								delete this.diffOfId[diffid]
+							}
+						}
+						// clean up mostRecentTextOfCtrlKZoneId for CtrlKZones
+						if (diffArea.type === 'CtrlKZone') {
+							delete this.mostRecentTextOfCtrlKZoneId[diffareaid]
+						}
+						// dispose mount info if exists (only CtrlKZone has _mountInfo)
+						if (diffArea.type === 'CtrlKZone' && diffArea._mountInfo) {
+							diffArea._mountInfo.dispose()
+						}
+						delete this.diffAreaOfId[diffareaid]
+					}
+				}
+			}
+			delete this.diffAreasOfURI[fsPath]
+		}));
+
 
 		// this function adds listeners to refresh styles when editor changes tab
 		let initializeEditor = (editor: ICodeEditor) => {
@@ -249,7 +286,16 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		for (const change of e.changes) {
 			this._realignAllDiffAreasLines(uri, change.text, change.range)
 		}
-		this._refreshStylesAndDiffsInURI(uri)
+
+		// Debounce the full refresh to avoid re-computing diffs on every keystroke
+		// Keep immediate feedback for the current diff zone, but batch the full file refresh
+		if (this._refreshDebounceTimers[uri.fsPath]) {
+			clearTimeout(this._refreshDebounceTimers[uri.fsPath])
+		}
+		this._refreshDebounceTimers[uri.fsPath] = setTimeout(() => {
+			this._refreshStylesAndDiffsInURI(uri)
+			delete this._refreshDebounceTimers[uri.fsPath]
+		}, 150)
 
 		// if diffarea has no diffs after a user edit, delete it
 		const diffAreasToDelete: DiffZone[] = []
@@ -672,9 +718,17 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 			if (diffArea._URI.fsPath !== uri.fsPath) continue
 
-			snapshottedDiffAreaOfId[diffareaid] = deepClone(
-				Object.fromEntries(diffAreaSnapshotKeys.map(key => [key, diffArea[key]]))
-			) as DiffAreaSnapshotEntry
+			// Shallow clone is sufficient here since diffAreaSnapshotKeys are all primitives
+			// (type, diffareaid, originalCode, startLine, endLine, editorId).
+			// No nested reference types are included in the snapshot.
+			snapshottedDiffAreaOfId[diffareaid] = {
+				type: diffArea.type,
+				diffareaid: diffArea.diffareaid,
+				originalCode: diffArea.originalCode,
+				startLine: diffArea.startLine,
+				endLine: diffArea.endLine,
+				editorId: diffArea.editorId,
+			} as DiffAreaSnapshotEntry
 		}
 
 		const entireFileCode = model ? model.getValue(EndOfLinePreference.LF) : ''
@@ -698,7 +752,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		// delete all diffareas on this uri (clearing their styles)
 		this._deleteAllDiffAreas(uri)
 
-		const { snapshottedDiffAreaOfId, entireFileCode: entireModelCode } = deepClone(snapshot) // don't want to destroy the snapshot
+		// Destructuring is sufficient - snapshot contains only primitive types and plain objects
+		// no shared references that could corrupt state
+		const { snapshottedDiffAreaOfId, entireFileCode: entireModelCode } = snapshot
 
 		// restore diffAreaOfId and diffAreasOfModelId
 		for (const diffareaid in snapshottedDiffAreaOfId) {

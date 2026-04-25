@@ -111,9 +111,12 @@
     "eslint-plugin-react": "^7.37.5",
     "google-auth-library": "^9.15.1",
     "groq-sdk": "^0.20.1",
+    "gulp-merge-json": "^2.2.1",
+    "gulp-sort": "^2.0.0",
     "http-proxy-agent": "^7.0.0",
     "https-proxy-agent": "^7.0.2",
     "jschardet": "3.1.4",
+    "jsonc-parser": "^3.3.1",
     "kerberos": "2.1.1",
     "lucide-react": "^0.503.0",
     "marked": "^15.0.11",
@@ -130,6 +133,7 @@
     "react-dom": "^19.1.0",
     "react-tooltip": "^5.28.1",
     "tas-client-umd": "0.2.0",
+    "ternary-stream": "^3.0.0",
     "v8-inspect-profiler": "^0.1.1",
     "vscode-oniguruma": "1.7.0",
     "vscode-regexpp": "^3.1.0",
@@ -259,6 +263,9 @@
     "node-gyp-build": "4.8.1",
     "kerberos@2.1.1": {
       "node-addon-api": "7.1.0"
+    },
+    "flatmap-stream@<0.0.1-security": {
+      "flatmap-stream": "0.0.1-security"
     }
   },
   "repository": {

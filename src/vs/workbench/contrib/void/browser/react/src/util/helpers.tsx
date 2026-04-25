@@ -29,3 +29,30 @@ export const usePromise = <T,>(promise: Promise<T>): T | undefined => {
 	}, [promise])
 	return val
 }
+
+// Debounces a callback with a specified delay (ms).
+// Returns a stable callback that invoke fn after delay of delayMs milliseconds.
+// If called again before delay expires, the timer resets.
+export const useDebounce = <T extends (...args: any[]) => any>(fn: T, delayMs: number): T => {
+	const timerRef = useRef<number | null>(null)
+
+	const debouncedFn = useCallback((...args: Parameters<T>) => {
+		if (timerRef.current !== null) {
+			clearTimeout(timerRef.current)
+		}
+		timerRef.current = window.setTimeout(() => {
+			fn(...args)
+			timerRef.current = null
+		}, delayMs)
+	}, [fn, delayMs])
+
+	useEffect(() => {
+		return () => {
+			if (timerRef.current !== null) {
+				clearTimeout(timerRef.current)
+			}
+		}
+	}, [])
+
+	return debouncedFn as T
+}
