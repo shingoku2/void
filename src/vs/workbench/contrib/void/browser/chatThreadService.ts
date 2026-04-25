@@ -1334,7 +1334,6 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const addURI = (uri: URI) => {
 			if (!fsPathsSet.has(uri.fsPath)) uris.push(uri)
 			fsPathsSet.add(uri.fsPath)
-			uris.push(uri)
 		}
 
 		for (const m of thread.messages) {

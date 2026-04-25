@@ -79,9 +79,10 @@ export const CopyButton = ({ codeStr, toolTipName }: { codeStr: string | (() => 
 
 	useEffect(() => {
 		if (copyButtonText === CopyButtonText.Idle) return
-		setTimeout(() => {
+		const timerId = setTimeout(() => {
 			setCopyButtonText(CopyButtonText.Idle)
 		}, COPY_FEEDBACK_TIMEOUT)
+		return () => clearTimeout(timerId)
 	}, [copyButtonText])
 
 	const onCopy = useCallback(async () => {
