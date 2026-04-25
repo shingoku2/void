@@ -349,11 +349,15 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 
 		return (
 			<div>
-				<table>
+				<table className={'min-w-full border border-void-bg-2'}>
 					<thead>
-						<tr>
+						<tr className='bg-void-bg-1'>
 							{t.header.map((h, hIdx: number) => (
-								<th key={hIdx}>
+								<th
+									key={hIdx}
+									className='px-4 py-2 border border-void-bg-2 font-semibold'
+									style={{ textAlign: t.align[hIdx] || 'left' }}
+								>
 									{h.text}
 								</th>
 							))}
@@ -361,9 +365,13 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 					</thead>
 					<tbody>
 						{t.rows.map((row, rowIdx: number) => (
-							<tr key={rowIdx}>
+							<tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-void-bg-1' : ''}>
 								{row.map((r, rIdx: number) => (
-									<td key={rIdx} >
+									<td
+										key={rIdx}
+										className={'px-4 py-2 border border-void-bg-2'}
+										style={{ textAlign: t.align[rIdx] || 'left' }}
+									>
 										{r.text}
 									</td>
 								))}
@@ -373,40 +381,6 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 				</table>
 			</div>
 		)
-		// return (
-		// 	<div>
-		// 		<table className={'min-w-full border border-void-bg-2'}>
-		// 			<thead>
-		// 				<tr className='bg-void-bg-1'>
-		// 					{t.header.map((cell: any, index: number) => (
-		// 						<th
-		// 							key={index}
-		// 							className='px-4 py-2 border border-void-bg-2 font-semibold'
-		// 							style={{ textAlign: t.align[index] || 'left' }}
-		// 						>
-		// 							{cell.raw}
-		// 						</th>
-		// 					))}
-		// 				</tr>
-		// 			</thead>
-		// 			<tbody>
-		// 				{t.rows.map((row: any[], rowIndex: number) => (
-		// 					<tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-void-bg-1'}>
-		// 						{row.map((cell: any, cellIndex: number) => (
-		// 							<td
-		// 								key={cellIndex}
-		// 								className={'px-4 py-2 border border-void-bg-2'}
-		// 								style={{ textAlign: t.align[cellIndex] || 'left' }}
-		// 							>
-		// 								{cell.raw}
-		// 							</td>
-		// 						))}
-		// 					</tr>
-		// 				))}
-		// 			</tbody>
-		// 		</table>
-		// 	</div>
-		// )
 	}
 
 	if (t.type === 'hr') {

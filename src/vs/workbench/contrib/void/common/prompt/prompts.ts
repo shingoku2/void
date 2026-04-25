@@ -505,7 +505,7 @@ Here's an example of a good code block:\n${chatSuggestionDiffExample}`)
 	}
 
 	details.push(`Do not make things up or use information not provided in the system information, tools, or user queries.`)
-	details.push(`Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables.`)
+	details.push(`Always use MARKDOWN to format lists, bullet points, etc.`)
 	details.push(`Today's date is ${new Date().toDateString()}.`)
 
 	const importantDetails = (`Important notes:
