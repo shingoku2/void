@@ -118,9 +118,9 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
 	return createDuplex(input, output);
 }
 function createDuplex(input: Writable, output: NodeJS.ReadWriteStream): NodeJS.ReadWriteStream {
-	const passThrough = new PassThrough();
-	input.pipe(passThrough);
-	passThrough.pipe(output);
+	const passThrough = new PassThrough({ objectMode: true });
+	passThrough.pipe(input);
+	output.pipe(passThrough);
 	return passThrough;
 }
 

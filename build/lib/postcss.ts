@@ -9,7 +9,7 @@ import through2 from 'through2';
 export function gulpPostcss(plugins: postcss.AcceptedPlugin[], handleError?: (err: Error) => void) {
 	const instance = postcss(plugins);
 
-	return through2.obj((file: File, callback) => {
+	return through2.obj((file: File, _encoding, callback) => {
 		if (file.isNull()) {
 			return callback(null, file);
 		}

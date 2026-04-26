@@ -105,9 +105,9 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
     return createDuplex(input, output);
 }
 function createDuplex(input, output) {
-    const passThrough = new stream_1.PassThrough();
-    input.pipe(passThrough);
-    passThrough.pipe(output);
+    const passThrough = new stream_1.PassThrough({ objectMode: true });
+    passThrough.pipe(input);
+    output.pipe(passThrough);
     return passThrough;
 }
 function isImportNode(ts, node) {

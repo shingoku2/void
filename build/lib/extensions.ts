@@ -41,18 +41,27 @@ function extractVsix(): NodeJS.ReadWriteStream {
 	const transform = new Transform({
 		objectMode: true,
 		transform(file: File, _encoding, callback) {
+			let done = false;
+			const finish = (err?: Error | null) => {
+				if (done) {
+					return;
+				}
+				done = true;
+				callback(err ?? null, err ? undefined : file);
+			};
+
 			if (!file.isBuffer()) {
-				callback(new Error('extractVsix requires a buffer file'));
+				finish(new Error('extractVsix requires a buffer file'));
 				return;
 			}
 
 			yauzl.fromBuffer(file.contents as Buffer, { lazyEntries: true, autoClose: true }, (err, zipfile) => {
 				if (err) {
-					callback(err);
+					finish(err);
 					return;
 				}
 				if (!zipfile) {
-					callback(new Error('yauzl returned null zipfile'));
+					finish(new Error('yauzl returned null zipfile'));
 					return;
 				}
 
@@ -68,7 +77,7 @@ function extractVsix(): NodeJS.ReadWriteStream {
 					let pending = entries.length;
 
 					if (pending === 0) {
-						callback(null, file);
+						finish();
 						return;
 					}
 
@@ -79,14 +88,14 @@ function extractVsix(): NodeJS.ReadWriteStream {
 						if (entryPath.endsWith('/')) {
 							pending--;
 							if (pending === 0) {
-								callback(null, file);
+								finish();
 							}
 							continue;
 						}
 
 						zipfile.openReadStream(entry, (err, readStream) => {
 							if (err) {
-								callback(err);
+								finish(err);
 								return;
 							}
 							const chunks: Uint8Array[] = [];
@@ -101,15 +110,15 @@ function extractVsix(): NodeJS.ReadWriteStream {
 								transform.push(vinylFile);
 								pending--;
 								if (pending === 0) {
-									callback(null, file);
+									finish();
 								}
 							});
-							readStream.on('error', callback);
+							readStream.on('error', finish);
 						});
 					}
 				});
 
-				zipfile.on('error', callback);
+				zipfile.on('error', finish);
 				zipfile.readEntry();
 			});
 		}
@@ -519,15 +528,27 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 	const combineStreams = (streams: Stream[]): Stream => {
 		const output = new PassThrough({ objectMode: true });
 		let pending = streams.length;
+		let failed = false;
+		const fail = (err: Error) => {
+			if (failed) {
+				return;
+			}
+			failed = true;
+			output.emit('error', err);
+			output.end();
+		};
 		if (pending === 0) {
 			output.end();
 			return output;
 		}
 
 		for (const stream of streams) {
-			stream.on('error', err => output.emit('error', err));
+			stream.on('error', fail);
 			let done = false;
 			const onDone = () => {
+				if (failed) {
+					return;
+				}
 				if (done) {
 					return;
 				}

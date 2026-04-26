@@ -45,7 +45,6 @@ exports.createCompile = createCompile;
 exports.transpileTask = transpileTask;
 exports.compileTask = compileTask;
 exports.watchTask = watchTask;
-const stream_1 = __importDefault(require("stream"));
 const through2_1 = __importDefault(require("through2"));
 const fs_1 = __importDefault(require("fs"));
 const gulp_1 = __importDefault(require("gulp"));
@@ -118,7 +117,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         })))
             .pipe(tsFilter.restore)
             .pipe(reporter.end(!!emitError));
-        return stream_1.default.PassThrough({ objectMode: true });
+        return output;
     }
     pipeline.tsProjectSrc = () => {
         return compilation.src({ base: src });

@@ -12,7 +12,7 @@ const postcss_1 = __importDefault(require("postcss"));
 const through2_1 = __importDefault(require("through2"));
 function gulpPostcss(plugins, handleError) {
     const instance = (0, postcss_1.default)(plugins);
-    return through2_1.default.obj((file, callback) => {
+    return through2_1.default.obj((file, _encoding, callback) => {
         if (file.isNull()) {
             return callback(null, file);
         }
