@@ -168,4 +168,3 @@ function create(projectPath, existingOptions, config, onError = _defaultOnError)
     };
     return result;
 }
-//# sourceMappingURL=index.js.map

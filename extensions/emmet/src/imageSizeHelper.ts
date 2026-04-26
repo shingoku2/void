@@ -70,10 +70,10 @@ function getImageSizeFromURL(urlStr: string): Promise<ImageInfoWithScale | undef
 		const urlPath: string = url.pathname;
 
 		getTransport(url, resp => {
-			const chunks: Buffer[] = [];
+			const chunks: Uint8Array[] = [];
 			let bufSize = 0;
 
-			const trySize = (chunks: Buffer[]) => {
+			const trySize = (chunks: Uint8Array[]) => {
 				try {
 					const size: ISizeCalculationResult = imageSize(Buffer.concat(chunks, bufSize));
 					resp.removeListener('data', onData);
@@ -86,7 +86,7 @@ function getImageSizeFromURL(urlStr: string): Promise<ImageInfoWithScale | undef
 
 			const onData = (chunk: Buffer) => {
 				bufSize += chunk.length;
-				chunks.push(chunk);
+				chunks.push(new Uint8Array(chunk));
 				trySize(chunks);
 			};
 

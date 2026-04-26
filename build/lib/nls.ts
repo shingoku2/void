@@ -5,7 +5,8 @@
 
 import type * as ts from 'typescript';
 import lazy from 'lazy.js';
-import { duplex, through } from 'event-stream';
+import { PassThrough, Writable, Readable } from 'stream';
+import through2 from 'through2';
 import File from 'vinyl';
 import sm from 'source-map';
 import path from 'path';
@@ -54,10 +55,10 @@ function clone<T extends object>(object: T): T {
  */
 export function nls(options: { preserveEnglish: boolean }): NodeJS.ReadWriteStream {
 	let base: string;
-	const input = through();
+	const input = through2();
 	const output = input
-		.pipe(sort()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
-		.pipe(through(function (f: FileSourceMap) {
+		.pipe(sort())
+		.pipe(through2(function (f: FileSourceMap) {
 			if (!f.sourceMap) {
 				return this.emit('error', new Error(`File ${f.relative} does not have sourcemaps.`));
 			}
@@ -114,7 +115,13 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
 			this.emit('end');
 		}));
 
-	return duplex(input, output);
+	return createDuplex(input, output);
+}
+function createDuplex(input: Writable, output: NodeJS.ReadWriteStream): NodeJS.ReadWriteStream {
+	const passThrough = new PassThrough();
+	input.pipe(passThrough);
+	passThrough.pipe(output);
+	return passThrough;
 }
 
 function isImportNode(ts: typeof import('typescript'), node: ts.Node): boolean {

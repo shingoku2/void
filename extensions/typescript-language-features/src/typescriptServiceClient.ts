@@ -22,7 +22,7 @@ import { ILogDirectoryProvider } from './tsServer/logDirectoryProvider';
 import { NodeVersionManager } from './tsServer/nodeManager';
 import { TypeScriptPluginPathsProvider } from './tsServer/pluginPathsProvider';
 import { PluginManager } from './tsServer/plugins';
-import * as Proto from './tsServer/protocol/protocol';
+import type * as Proto from './tsServer/protocol/protocol';
 import { EventName } from './tsServer/protocol/protocol.const';
 import { ITypeScriptServer, TsServerLog, TsServerProcessFactory, TypeScriptServerExitEvent } from './tsServer/server';
 import { TypeScriptServerError } from './tsServer/serverError';
@@ -1107,7 +1107,7 @@ export default class TypeScriptServiceClient extends Disposable implements IType
 	private addWatchEvent(id: number, eventType: keyof WatchEvent, path: string) {
 		let event = this.watchEvents.get(id);
 		const removeEvent = (typeOfEventToRemove: keyof WatchEvent) => {
-			if (event?.[typeOfEventToRemove]?.delete(path) && event[typeOfEventToRemove].size === 0) {
+			if (event?.[typeOfEventToRemove]?.delete(path) && event?.[typeOfEventToRemove]?.size === 0) {
 				event[typeOfEventToRemove] = undefined;
 			}
 		};

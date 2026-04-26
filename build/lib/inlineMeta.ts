@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import through2 from 'through2';
 import { basename } from 'path';
 import File from 'vinyl';
 
@@ -24,7 +24,7 @@ const packageJsonMarkerId = 'BUILD_INSERT_PACKAGE_CONFIGURATION';
 // const productJsonMarkerId = 'BUILD_INSERT_PRODUCT_CONFIGURATION';
 
 export function inlineMeta(result: NodeJS.ReadWriteStream, ctx: IInlineMetaContext): NodeJS.ReadWriteStream {
-	return result.pipe(es.through(function (file: File) {
+	return result.pipe(through2.obj(function (file: File, _enc, callback) {
 		if (matchesFile(file, ctx)) {
 			let content = file.contents.toString();
 			let markerFound = false;
@@ -46,7 +46,7 @@ export function inlineMeta(result: NodeJS.ReadWriteStream, ctx: IInlineMetaConte
 			}
 		}
 
-		this.emit('data', file);
+		callback(null, file);
 	}));
 }
 

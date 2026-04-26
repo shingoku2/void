@@ -42,15 +42,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bundleTask = bundleTask;
 exports.minifyTask = minifyTask;
-const event_stream_1 = __importDefault(require("event-stream"));
+const stream = __importStar(require("stream"));
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
 const gulp_1 = __importDefault(require("gulp"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
-const pump_1 = __importDefault(require("pump"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const bundle = __importStar(require("./bundle"));
-const postcss_1 = require("./postcss");
 const esbuild_1 = __importDefault(require("esbuild"));
 const gulp_sourcemaps_1 = __importDefault(require("gulp-sourcemaps"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
@@ -62,8 +62,8 @@ const DEFAULT_FILE_HEADER = [
     ' *--------------------------------------------------------*/'
 ].join('\n');
 function bundleESMTask(opts) {
-    const resourcesStream = event_stream_1.default.through(); // this stream will contain the resources
-    const bundlesStream = event_stream_1.default.through(); // this stream will contain the bundled files
+    const resourcesStream = through2_1.default.obj(); // this stream will contain the resources
+    const bundlesStream = through2_1.default.obj(); // this stream will contain the bundled files
     const entryPoints = opts.entryPoints.map(entryPoint => {
         if (typeof entryPoint === 'string') {
             return { name: path_1.default.parse(entryPoint).name };
@@ -167,11 +167,11 @@ function bundleESMTask(opts) {
     };
     bundleAsync().then((output) => {
         // bundle output (JS, CSS, SVG...)
-        event_stream_1.default.readArray(output.files).pipe(bundlesStream);
+        stream.Readable.from(output.files).pipe(bundlesStream);
         // forward all resources
         gulp_1.default.src(opts.resources ?? [], { base: `${opts.src}`, allowEmpty: true }).pipe(resourcesStream);
     });
-    const result = event_stream_1.default.merge(bundlesStream, resourcesStream);
+    const result = (0, merge_stream_1.default)(bundlesStream, resourcesStream);
     return result
         .pipe(gulp_sourcemaps_1.default.write('./', {
         sourceRoot: undefined,
@@ -186,42 +186,98 @@ function bundleTask(opts) {
 }
 function minifyTask(src, sourceMapBaseUrl) {
     const sourceMappingURL = sourceMapBaseUrl ? ((f) => `${sourceMapBaseUrl}/${f.relative}.map`) : undefined;
-    return cb => {
-        const cssnano = require('cssnano');
+    return async (cb) => {
         const svgmin = require('gulp-svgmin');
         const jsFilter = (0, gulp_filter_1.default)('**/*.js', { restore: true });
         const cssFilter = (0, gulp_filter_1.default)('**/*.css', { restore: true });
         const svgFilter = (0, gulp_filter_1.default)('**/*.svg', { restore: true });
-        (0, pump_1.default)(gulp_1.default.src([src + '/**', '!' + src + '/**/*.map']), jsFilter, gulp_sourcemaps_1.default.init({ loadMaps: true }), event_stream_1.default.map((f, cb) => {
-            esbuild_1.default.build({
-                entryPoints: [f.path],
-                minify: true,
-                sourcemap: 'external',
-                outdir: '.',
-                packages: 'external', // "external all the things", see https://esbuild.github.io/api/#packages
-                platform: 'neutral', // makes esm
-                target: ['es2022'],
-                write: false
-            }).then(res => {
-                const jsFile = res.outputFiles.find(f => /\.js$/.test(f.path));
-                const sourceMapFile = res.outputFiles.find(f => /\.js\.map$/.test(f.path));
-                const contents = Buffer.from(jsFile.contents);
-                const unicodeMatch = contents.toString().match(/[^\x00-\xFF]+/g);
-                if (unicodeMatch) {
-                    cb(new Error(`Found non-ascii character ${unicodeMatch[0]} in the minified output of ${f.path}. Non-ASCII characters in the output can cause performance problems when loading. Please review if you have introduced a regular expression that esbuild is not automatically converting and convert it to using unicode escape sequences.`));
+        const srcStream = gulp_1.default.src([src + '/**', '!' + src + '/**/*.map']);
+        const jsStream = srcStream
+            .pipe(jsFilter)
+            .pipe(gulp_sourcemaps_1.default.init({ loadMaps: true }));
+        // Process JS files with esbuild
+        const processedJsFiles = [];
+        for await (const f of jsStream) {
+            const jsFile = f;
+            if (!jsFile.path.endsWith('.js')) {
+                processedJsFiles.push(jsFile);
+                continue;
+            }
+            try {
+                const res = await esbuild_1.default.build({
+                    entryPoints: [jsFile.path],
+                    minify: true,
+                    sourcemap: 'external',
+                    outdir: '.',
+                    packages: 'external',
+                    platform: 'neutral',
+                    target: ['es2022'],
+                    write: false
+                });
+                const jsOut = res.outputFiles.find(f => /\.js$/.test(f.path));
+                const mapOut = res.outputFiles.find(f => /\.js\.map$/.test(f.path));
+                if (jsOut) {
+                    const contents = Buffer.from(jsOut.contents);
+                    const unicodeMatch = contents.toString().match(/[^\x00-\xFF]+/g);
+                    if (unicodeMatch) {
+                        cb(new Error(`Found non-ascii character ${unicodeMatch[0]} in minified output of ${jsFile.path}`));
+                        return;
+                    }
+                    jsFile.contents = contents;
+                    jsFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
                 }
-                else {
-                    f.contents = contents;
-                    f.sourceMap = JSON.parse(sourceMapFile.text);
-                    cb(undefined, f);
+                processedJsFiles.push(jsFile);
+            }
+            catch (err) {
+                cb(err);
+                return;
+            }
+        }
+        // Process CSS files with esbuild (replaces cssnano)
+        const cssStream = gulp_1.default.src([src + '/**/*.css', '!' + src + '/**/*.map']);
+        const processedCssFiles = [];
+        for await (const f of cssStream) {
+            const cssFile = f;
+            try {
+                const res = await esbuild_1.default.build({
+                    entryPoints: [cssFile.path],
+                    minify: true,
+                    sourcemap: 'external',
+                    outdir: '.',
+                    loader: { '.css': 'css' },
+                    write: false
+                });
+                const cssOut = res.outputFiles.find(f => /\.css$/.test(f.path));
+                const mapOut = res.outputFiles.find(f => /\.css\.map$/.test(f.path));
+                if (cssOut) {
+                    cssFile.contents = Buffer.from(cssOut.contents);
+                    cssFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
                 }
-            }, cb);
-        }), jsFilter.restore, cssFilter, (0, postcss_1.gulpPostcss)([cssnano({ preset: 'default' })]), cssFilter.restore, svgFilter, svgmin(), svgFilter.restore, gulp_sourcemaps_1.default.write('./', {
+                processedCssFiles.push(cssFile);
+            }
+            catch (err) {
+                cb(err);
+                return;
+            }
+        }
+        // Process SVG files
+        const svgStream = gulp_1.default.src([src + '/**/*.svg', '!' + src + '/**/*.map']);
+        const processedSvgFiles = [];
+        for await (const f of svgStream) {
+            processedSvgFiles.push(f);
+        }
+        // Output
+        const outStream = (0, merge_stream_1.default)(stream.Readable.from(processedJsFiles), stream.Readable.from(processedCssFiles), stream.Readable.from(processedSvgFiles));
+        outStream
+            .pipe(gulp_sourcemaps_1.default.write('./', {
             sourceMappingURL,
             sourceRoot: undefined,
             includeContent: true,
             addComment: true
-        }), gulp_1.default.dest(src + '-min'), (err) => cb(err));
+        }))
+            .pipe(gulp_1.default.dest(src + '-min'))
+            .on('end', () => cb())
+            .on('error', (err) => cb(err));
     };
 }
 //# sourceMappingURL=optimize.js.map

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import path from 'path';
-import es from 'event-stream';
+import through2 from 'through2';
 const pickle = require('chromium-pickle-js');
 const Filesystem = <typeof AsarFilesystem>require('asar/lib/filesystem');
 import VinylFile from 'vinyl';
@@ -91,24 +91,24 @@ export function createAsar(folderPath: string, unpackGlobs: string[], skipGlobs:
 		filesystem.insertFile(relativePath, shouldUnpack, { stat: stat }, {}).then(() => onFileInserted(), () => onFileInserted());
 	};
 
-	return es.through(function (file) {
+	return through2.obj(function (file, _enc, callback) {
 		if (file.stat.isDirectory()) {
-			return;
+			return callback();
 		}
 		if (!file.stat.isFile()) {
-			throw new Error(`unknown item in stream!`);
+			return callback(new Error(`unknown item in stream!`));
 		}
 		if (shouldSkipFile(file)) {
-			this.queue(new VinylFile({
+			this.push(new VinylFile({
 				base: '.',
 				path: file.path,
 				stat: file.stat,
 				contents: file.contents
 			}));
-			return;
+			return callback();
 		}
 		if (shouldDuplicateFile(file)) {
-			this.queue(new VinylFile({
+			this.push(new VinylFile({
 				base: '.',
 				path: file.path,
 				stat: file.stat,
@@ -121,7 +121,7 @@ export function createAsar(folderPath: string, unpackGlobs: string[], skipGlobs:
 		if (shouldUnpack) {
 			// The file goes outside of xx.asar, in a folder xx.asar.unpacked
 			const relative = path.relative(folderPath, file.path);
-			this.queue(new VinylFile({
+			this.push(new VinylFile({
 				base: '.',
 				path: path.join(destFilename + '.unpacked', relative),
 				stat: file.stat,
@@ -131,7 +131,8 @@ export function createAsar(folderPath: string, unpackGlobs: string[], skipGlobs:
 			// The file goes inside of xx.asar
 			out.push(file.contents);
 		}
-	}, function () {
+		callback();
+	}, function (callback) {
 
 		const finish = () => {
 			{
@@ -150,12 +151,13 @@ export function createAsar(folderPath: string, unpackGlobs: string[], skipGlobs:
 			const contents = Buffer.concat(out);
 			out.length = 0;
 
-			this.queue(new VinylFile({
+			this.push(new VinylFile({
 				base: '.',
 				path: destFilename,
 				contents: contents
 			}));
-			this.queue(null);
+			this.push(null);
+			callback();
 		};
 
 		// Call finish() only when all file inserts have finished...

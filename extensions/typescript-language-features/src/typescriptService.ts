@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as Proto from './tsServer/protocol/protocol';
+import type * as Proto from './tsServer/protocol/protocol';
 import BufferSyncSupport from './tsServer/bufferSyncSupport';
 import { ExecutionTarget } from './tsServer/server';
 import { TypeScriptVersion } from './tsServer/versionProvider';

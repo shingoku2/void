@@ -18,6 +18,12 @@ export class GitEditor implements IIPCHandler, ITerminalEnvironmentProvider {
 
 	private env: { [key: string]: string };
 	private disposable: IDisposable = EmptyDisposable;
+	/**
+	 * Wait for the commit message document to be closed, then resolve.
+	 * Tab listeners are tracked in _tabListeners map and disposed when the tab closes
+	 * or when dispose() is called to prevent memory leaks.
+	 */
+	private _tabListeners = new Map<string, IDisposable>();
 
 	readonly featureDescription = 'git editor';
 
@@ -44,9 +50,11 @@ export class GitEditor implements IIPCHandler, ITerminalEnvironmentProvider {
 				const onDidClose = window.tabGroups.onDidChangeTabs(async (tabs) => {
 					if (tabs.closed.some(t => t.input instanceof TabInputText && t.input.uri.toString() === uri.toString())) {
 						onDidClose.dispose();
+						this._tabListeners.delete(commitMessagePath);
 						return c(true);
 					}
 				});
+				this._tabListeners.set(commitMessagePath, onDidClose);
 			});
 		}
 	}
@@ -63,6 +71,10 @@ export class GitEditor implements IIPCHandler, ITerminalEnvironmentProvider {
 
 	dispose(): void {
 		this.disposable.dispose();
+		for (const listener of this._tabListeners.values()) {
+			listener.dispose();
+		}
+		this._tabListeners.clear();
 	}
 }
 
@@ -100,10 +112,10 @@ export class GitEditorDocumentLinkProvider implements DocumentLinkProvider {
 		return links;
 	}
 
-	private _createDocumentLink(repository: Repository, document: TextDocument, match: RegExpExecArray, file: string): DocumentLink {
+	private _createDocumentLink(repository: Repository, document: TextDocument, match: RegExpMatchArray, file: string): DocumentLink {
 		const startIndex = match[0].indexOf(file);
-		const startPosition = document.positionAt(match.index + startIndex);
-		const endPosition = document.positionAt(match.index + startIndex + file.length);
+		const startPosition = document.positionAt((match.index ?? 0) + startIndex);
+		const endPosition = document.positionAt((match.index ?? 0) + startIndex + file.length);
 
 		const documentLink = new DocumentLink(
 			new Range(startPosition, endPosition),

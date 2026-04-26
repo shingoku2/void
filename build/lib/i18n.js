@@ -17,7 +17,8 @@ exports.prepareI18nPackFiles = prepareI18nPackFiles;
 exports.prepareIslFiles = prepareIslFiles;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
-const event_stream_1 = require("event-stream");
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
 const gulp_merge_json_1 = __importDefault(require("gulp-merge-json"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const xml2js_1 = __importDefault(require("xml2js"));
@@ -307,7 +308,7 @@ function processCoreBundleFormat(base, fileHeader, languages, json, emitter) {
                 nlsIndex++;
             }
         }
-        emitter.queue(new vinyl_1.default({
+        emitter.push(new vinyl_1.default({
             contents: Buffer.from(`${fileHeader}
 globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(nlsResult)};
 globalThis._VSCODE_NLS_LANGUAGE=${JSON.stringify(language.id)};`),
@@ -317,7 +318,7 @@ globalThis._VSCODE_NLS_LANGUAGE=${JSON.stringify(language.id)};`),
     });
 }
 function processNlsFiles(opts) {
-    return (0, event_stream_1.through)(function (file) {
+    return through2_1.default.obj(function (file, _enc, callback) {
         const fileName = path_1.default.basename(file.path);
         if (fileName === 'nls.keys.json') {
             try {
@@ -331,7 +332,8 @@ function processNlsFiles(opts) {
                 this.emit('error', `Failed to read component file: ${error}`);
             }
         }
-        this.queue(file);
+        this.push(file);
+        callback();
     });
 }
 const editorProject = 'vscode-editor', workbenchProject = 'vscode-workbench', extensionsProject = 'vscode-extensions', setupProject = 'vscode-setup', serverProject = 'vscode-server';
@@ -369,7 +371,7 @@ function getResource(sourceFile) {
     throw new Error(`Could not identify the XLF bundle for ${sourceFile}`);
 }
 function createXlfFilesForCoreBundle() {
-    return (0, event_stream_1.through)(function (file) {
+    return through2_1.default.obj(function (file, _enc, callback) {
         const basename = path_1.default.basename(file.path);
         if (basename === 'nls.metadata.json') {
             if (file.isBuffer()) {
@@ -383,7 +385,7 @@ function createXlfFilesForCoreBundle() {
                     const messages = json.messages[coreModule];
                     if (keys.length !== messages.length) {
                         this.emit('error', `There is a mismatch between keys and messages in ${file.relative} for module ${coreModule}`);
-                        return;
+                        return callback();
                     }
                     else {
                         let xlf = xlfs[resource];
@@ -401,17 +403,18 @@ function createXlfFilesForCoreBundle() {
                         path: filePath,
                         contents: Buffer.from(xlf.toString(), 'utf8')
                     });
-                    this.queue(xlfFile);
+                    this.push(xlfFile);
                 }
+                callback();
             }
             else {
                 this.emit('error', new Error(`File ${file.relative} is not using a buffer content`));
-                return;
+                callback();
             }
         }
         else {
             this.emit('error', new Error(`File ${file.relative} is not a core meta data file.`));
-            return;
+            callback();
         }
     });
 }
@@ -426,8 +429,7 @@ function createL10nBundleForExtension(extensionFolderName, prefixWithBuildFolder
         // // For any dependencies pulled in that bundle @vscode/l10n. They needed to export the bundle
         `${prefix}extensions/${extensionFolderName}/**/bundle.l10n.json`,
     ])
-        .pipe((0, event_stream_1.map)(function (data, callback) {
-        const file = data;
+        .pipe(through2_1.default.obj(function (file, _enc, callback) {
         if (!file.isBuffer()) {
             // Not a buffer so we drop it
             callback();
@@ -446,8 +448,7 @@ function createL10nBundleForExtension(extensionFolderName, prefixWithBuildFolder
                 .catch((err) => {
                 callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
             });
-            // signal pause?
-            return false;
+            return;
         }
         // for bundle.l10n.jsons
         let bundleJson;
@@ -483,14 +484,16 @@ function createXlfFilesForExtensions() {
     let counter = 0;
     let folderStreamEnded = false;
     let folderStreamEndEmitted = false;
-    return (0, event_stream_1.through)(function (extensionFolder) {
+    return through2_1.default.obj(function (extensionFolder, _enc, callback) {
         const folderStream = this;
         const stat = fs_1.default.statSync(extensionFolder.path);
         if (!stat.isDirectory()) {
+            callback();
             return;
         }
         const extensionFolderName = path_1.default.basename(extensionFolder.path);
         if (extensionFolderName === 'node_modules') {
+            callback();
             return;
         }
         // Get extension id and use that as the id
@@ -505,7 +508,7 @@ function createXlfFilesForExtensions() {
             }
             return _l10nMap;
         }
-        (0, event_stream_1.merge)(gulp_1.default.src([`.build/extensions/${extensionFolderName}/package.nls.json`, `.build/extensions/${extensionFolderName}/**/nls.metadata.json`], { allowEmpty: true }), createL10nBundleForExtension(extensionFolderName, exports.EXTERNAL_EXTENSIONS.includes(extensionId))).pipe((0, event_stream_1.through)(function (file) {
+        (0, merge_stream_1.default)(gulp_1.default.src([`.build/extensions/${extensionFolderName}/package.nls.json`, `.build/extensions/${extensionFolderName}/**/nls.metadata.json`], { allowEmpty: true }), createL10nBundleForExtension(extensionFolderName, exports.EXTERNAL_EXTENSIONS.includes(extensionId))).pipe(through2_1.default.obj(function (file, _enc, cb) {
             if (file.isBuffer()) {
                 const buffer = file.contents;
                 const basename = path_1.default.basename(file.path);
@@ -535,41 +538,47 @@ function createXlfFilesForExtensions() {
                 }
                 else {
                     this.emit('error', new Error(`${file.path} is not a valid extension nls file`));
+                    cb();
                     return;
                 }
             }
+            cb();
         }, function () {
             if (_l10nMap?.size > 0) {
                 const xlfFile = new vinyl_1.default({
                     path: path_1.default.join(extensionsProject, extensionId + '.xlf'),
                     contents: Buffer.from((0, l10n_dev_1.getL10nXlf)(_l10nMap), 'utf8')
                 });
-                folderStream.queue(xlfFile);
+                folderStream.push(xlfFile);
             }
-            this.queue(null);
+            this.push(null);
             counter--;
             if (counter === 0 && folderStreamEnded && !folderStreamEndEmitted) {
                 folderStreamEndEmitted = true;
-                folderStream.queue(null);
+                folderStream.push(null);
             }
         }));
-    }, function () {
+        callback();
+    }, function (callback) {
         folderStreamEnded = true;
         if (counter === 0) {
             folderStreamEndEmitted = true;
-            this.queue(null);
+            this.push(null);
         }
+        callback();
     });
 }
 function createXlfFilesForIsl() {
-    return (0, event_stream_1.through)(function (file) {
+    return through2_1.default.obj(function (file, _enc, callback) {
         let projectName, resourceFile;
         if (path_1.default.basename(file.path) === 'messages.en.isl') {
             projectName = setupProject;
             resourceFile = 'messages.xlf';
         }
         else {
-            throw new Error(`Unknown input file ${file.path}`);
+            this.emit('error', new Error(`Unknown input file ${file.path}`));
+            callback();
+            return;
         }
         const xlf = new XLF(projectName), keys = [], messages = [];
         const model = new TextModel(file.contents.toString());
@@ -592,7 +601,8 @@ function createXlfFilesForIsl() {
             }
             const sections = line.split('=');
             if (sections.length !== 2) {
-                throw new Error(`Badly formatted message found: ${line}`);
+                this.emit('error', new Error(`Badly formatted message found: ${line}`));
+                return;
             }
             else {
                 const key = sections[0];
@@ -608,7 +618,8 @@ function createXlfFilesForIsl() {
         // Emit only upon all ISL files combined into single XLF instance
         const newFilePath = path_1.default.join(projectName, resourceFile);
         const xlfFile = new vinyl_1.default({ path: newFilePath, contents: Buffer.from(xlf.toString(), 'utf-8') });
-        this.queue(xlfFile);
+        this.push(xlfFile);
+        callback();
     });
 }
 function createI18nFile(name, messages) {
@@ -646,7 +657,7 @@ function prepareI18nPackFiles(resultingTranslationPaths) {
     const mainPack = { version: i18nPackVersion, contents: {} };
     const extensionsPacks = {};
     const errors = [];
-    return (0, event_stream_1.through)(function (xlf) {
+    return through2_1.default.obj(function (xlf, _enc, callback) {
         let project = path_1.default.basename(path_1.default.dirname(path_1.default.dirname(xlf.relative)));
         // strip `-new` since vscode-extensions-loc uses the `-new` suffix to indicate that it's from the new loc pipeline
         const resource = path_1.default.basename(path_1.default.basename(xlf.relative, '.xlf'), '-new');
@@ -678,46 +689,54 @@ function prepareI18nPackFiles(resultingTranslationPaths) {
         }).catch(reason => {
             errors.push(reason);
         });
-    }, function () {
+        callback();
+    }, function (callback) {
         Promise.all(parsePromises)
             .then(() => {
             if (errors.length > 0) {
-                throw errors;
+                this.emit('error', errors);
+                callback();
+                return;
             }
             const translatedMainFile = createI18nFile('./main', mainPack);
             resultingTranslationPaths.push({ id: 'vscode', resourceName: 'main.i18n.json' });
-            this.queue(translatedMainFile);
+            this.push(translatedMainFile);
             for (const extensionId in extensionsPacks) {
                 const translatedExtFile = createI18nFile(`extensions/${extensionId}`, extensionsPacks[extensionId]);
-                this.queue(translatedExtFile);
+                this.push(translatedExtFile);
                 resultingTranslationPaths.push({ id: extensionId, resourceName: `extensions/${extensionId}.i18n.json` });
             }
-            this.queue(null);
+            this.push(null);
+            callback();
         })
             .catch((reason) => {
             this.emit('error', reason);
+            callback();
         });
     });
 }
 function prepareIslFiles(language, innoSetupConfig) {
     const parsePromises = [];
-    return (0, event_stream_1.through)(function (xlf) {
+    return through2_1.default.obj(function (xlf, _enc, callback) {
         const stream = this;
         const parsePromise = XLF.parse(xlf.contents.toString());
         parsePromises.push(parsePromise);
         parsePromise.then(resolvedFiles => {
             resolvedFiles.forEach(file => {
                 const translatedFile = createIslFile(file.name, file.messages, language, innoSetupConfig);
-                stream.queue(translatedFile);
+                stream.push(translatedFile);
             });
+            callback();
         }).catch(reason => {
             this.emit('error', reason);
+            callback();
         });
-    }, function () {
+    }, function (callback) {
         Promise.all(parsePromises)
-            .then(() => { this.queue(null); })
+            .then(() => { this.push(null); callback(); })
             .catch(reason => {
             this.emit('error', reason);
+            callback();
         });
     });
 }

@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 import postcss from 'postcss';
 import File from 'vinyl';
-import es from 'event-stream';
+import through2 from 'through2';
 
 export function gulpPostcss(plugins: postcss.AcceptedPlugin[], handleError?: (err: Error) => void) {
 	const instance = postcss(plugins);
 
-	return es.map((file: File, callback: (error?: any, file?: any) => void) => {
+	return through2.obj((file: File, callback) => {
 		if (file.isNull()) {
 			return callback(null, file);
 		}

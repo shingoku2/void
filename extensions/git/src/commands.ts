@@ -814,7 +814,7 @@ export class CommandCenter {
 				isRebasing ? repo.getCommit('REBASE_HEAD') : repo.getCommit('MERGE_HEAD'),
 				await repo.diffBetween(isRebasing ? 'REBASE_HEAD' : 'MERGE_HEAD', 'HEAD')
 			]);
-			const diffFile = diffBetween?.find(diff => diff.uri.fsPath === uri.fsPath);
+			const diffFile = diffBetween?.find(diff => diff.uri.fsPath === (uri as Uri).fsPath);
 
 			// ours (current branch and commit)
 			current.detail = head.refNames.map(s => s.replace(/^HEAD ->/, '')).join(', ');
@@ -1657,7 +1657,7 @@ export class CommandCenter {
 
 		const result = changes.originalWithModifiedChanges;
 		await this.runByRepository(modifiedUri, async (repository, resource) =>
-			await repository.stage(resource, result, modifiedDocument.encoding));
+			await repository.stage(resource, result, modifiedDocument!.encoding));
 	}
 
 	@command('git.stageSelectedRanges')

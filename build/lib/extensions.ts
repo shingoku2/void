@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import { PassThrough, Transform } from 'stream';
 import fs from 'fs';
 import cp from 'child_process';
 import glob from 'glob';
@@ -14,7 +14,7 @@ import { Stream } from 'stream';
 import File from 'vinyl';
 import { createStatsStream } from './stats';
 import * as util2 from './util';
-const vzip = require('gulp-vinyl-zip');
+import * as yauzl from 'yauzl';
 import filter from 'gulp-filter';
 import rename from 'gulp-rename';
 import fancyLog from 'fancy-log';
@@ -26,24 +26,111 @@ import { getProductionDependencies } from './dependencies';
 import { IExtensionDefinition, getExtensionStream } from './builtInExtensions';
 import { getVersion } from './getVersion';
 import { fetchUrls, fetchGithub } from './fetch';
+import through2 from 'through2';
+import mergeStream from 'merge-stream';
 
 const root = path.dirname(path.dirname(__dirname));
 const commit = getVersion(root);
 const sourceMappingURLBase = `https://main.vscode-cdn.net/sourcemaps/${commit}`;
+
+/**
+ * Extract VSIX/ZIP contents using yauzl and return as a stream of vinyl files.
+ * This replaces gulp-vinyl-zip (vzip.src()) with direct yauzl usage.
+ */
+function extractVsix(): NodeJS.ReadWriteStream {
+	const transform = new Transform({
+		objectMode: true,
+		transform(file: File, _encoding, callback) {
+			if (!file.isBuffer()) {
+				callback(new Error('extractVsix requires a buffer file'));
+				return;
+			}
+
+			yauzl.fromBuffer(file.contents as Buffer, { lazyEntries: true, autoClose: true }, (err, zipfile) => {
+				if (err) {
+					callback(err);
+					return;
+				}
+				if (!zipfile) {
+					callback(new Error('yauzl returned null zipfile'));
+					return;
+				}
+
+				const entries: yauzl.Entry[] = [];
+
+				zipfile.on('entry', (entry: yauzl.Entry) => {
+					entries.push(entry);
+					zipfile.readEntry();
+				});
+
+				zipfile.on('end', () => {
+					// Process entries and emit vinyl files via transform.push()
+					let pending = entries.length;
+
+					if (pending === 0) {
+						callback(null, file);
+						return;
+					}
+
+					for (const entry of entries) {
+						const entryPath = entry.fileName;
+
+						// Skip directories
+						if (entryPath.endsWith('/')) {
+							pending--;
+							if (pending === 0) {
+								callback(null, file);
+							}
+							continue;
+						}
+
+						zipfile.openReadStream(entry, (err, readStream) => {
+							if (err) {
+								callback(err);
+								return;
+							}
+							const chunks: Uint8Array[] = [];
+							readStream.on('data', (chunk: Uint8Array) => chunks.push(chunk));
+							readStream.on('end', () => {
+								const contents = Buffer.concat(chunks as readonly Uint8Array[]);
+								const vinylFile = new File({
+									base: file.base,
+									path: path.join(file.base, entryPath),
+									contents,
+								});
+								transform.push(vinylFile);
+								pending--;
+								if (pending === 0) {
+									callback(null, file);
+								}
+							});
+							readStream.on('error', callback);
+						});
+					}
+				});
+
+				zipfile.on('error', callback);
+				zipfile.readEntry();
+			});
+		}
+	});
+
+	return transform;
+}
 
 function minifyExtensionResources(input: Stream): Stream {
 	const jsonFilter = filter(['**/*.json', '**/*.code-snippets'], { restore: true });
 	return input
 		.pipe(jsonFilter)
 		.pipe(buffer())
-		.pipe(es.mapSync((f: File) => {
+		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const errors: jsoncParser.ParseError[] = [];
 			const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
 			if (errors.length === 0) {
 				// file parsed OK => just stringify to drop whitespace and comments
 				f.contents = Buffer.from(JSON.stringify(value));
 			}
-			return f;
+			callback(null, f);
 		}))
 		.pipe(jsonFilter.restore);
 }
@@ -53,10 +140,10 @@ function updateExtensionPackageJSON(input: Stream, update: (data: any) => any): 
 	return input
 		.pipe(packageJsonFilter)
 		.pipe(buffer())
-		.pipe(es.mapSync((f: File) => {
+		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const data = JSON.parse(f.contents.toString('utf8'));
 			f.contents = Buffer.from(JSON.stringify(update(data)));
-			return f;
+			callback(null, f);
 		}))
 		.pipe(packageJsonFilter.restore);
 }
@@ -89,7 +176,7 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 	const vsce = require('@vscode/vsce') as typeof import('@vscode/vsce');
 	const webpack = require('webpack');
 	const webpackGulp = require('webpack-stream');
-	const result = es.through();
+	const result = new PassThrough({ objectMode: true });
 
 	const packagedDependencies: string[] = [];
 	const packageJsonConfig = require(path.join(extensionPath, 'package.json'));
@@ -162,12 +249,12 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 				const relativeOutputPath = path.relative(extensionPath, webpackConfig.output.path);
 
 				return webpackGulp(webpackConfig, webpack, webpackDone)
-					.pipe(es.through(function (data) {
+					.pipe(through2.obj(function (data, _encoding, callback) {
 						data.stat = data.stat || {};
 						data.base = extensionPath;
-						this.emit('data', data);
+						callback(null, data);
 					}))
-					.pipe(es.through(function (data: File) {
+					.pipe(through2.obj(function (data: File, _encoding, callback) {
 						// source map handling:
 						// * rewrite sourceMappingURL
 						// * save to disk so that upload-task picks this up
@@ -178,18 +265,27 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 							}), 'utf8');
 						}
 
-						this.emit('data', data);
+						callback(null, data);
 					}));
 			});
 		});
 
-		es.merge(...webpackStreams, es.readArray(files))
+		const filesStream = new PassThrough({ objectMode: true });
+		for (const file of files) {
+			filesStream.write(file);
+		}
+		filesStream.end();
+
+		const merged = mergeStream(...webpackStreams, filesStream);
+		merged.on('error', err => result.emit('error', err));
+		merged.on('end', () => result.end());
+		merged
 			// .pipe(es.through(function (data) {
 			// 	// debug
 			// 	console.log('out', data.path, data.contents.length);
 			// 	this.emit('data', data);
 			// }))
-			.pipe(result);
+			.pipe(result, { end: false });
 
 	}).catch(err => {
 		console.error(extensionPath);
@@ -202,7 +298,7 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 
 function fromLocalNormal(extensionPath: string): Stream {
 	const vsce = require('@vscode/vsce') as typeof import('@vscode/vsce');
-	const result = es.through();
+	const result = new PassThrough({ objectMode: true });
 
 	vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.Npm })
 		.then(fileNames => {
@@ -215,7 +311,14 @@ function fromLocalNormal(extensionPath: string): Stream {
 					contents: fs.createReadStream(filePath) as any
 				}));
 
-			es.readArray(files).pipe(result);
+			const filesStream = new PassThrough({ objectMode: true });
+			for (const file of files) {
+				filesStream.write(file);
+			}
+			filesStream.end();
+
+			filesStream.on('end', () => result.end());
+			filesStream.pipe(result, { end: false });
 		})
 		.catch(err => result.emit('error', err));
 
@@ -246,7 +349,7 @@ export function fromMarketplace(serviceUrl: string, { name: extensionName, versi
 		},
 		checksumSha256: sha256
 	})
-		.pipe(vzip.src())
+		.pipe(extractVsix())
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
@@ -264,16 +367,17 @@ export function fromVsix(vsixPath: string, { name: extensionName, version, sha25
 
 	return gulp.src(vsixPath)
 		.pipe(buffer())
-		.pipe(es.mapSync((f: File) => {
+		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const hash = crypto.createHash('sha256');
 			hash.update(f.contents as Buffer);
 			const checksum = hash.digest('hex');
 			if (checksum !== sha256) {
-				throw new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`);
+				callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
+			} else {
+				callback(null, f);
 			}
-			return f;
 		}))
-		.pipe(vzip.src())
+		.pipe(extractVsix())
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
@@ -296,7 +400,7 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
 		checksumSha256: sha256
 	})
 		.pipe(buffer())
-		.pipe(vzip.src())
+		.pipe(extractVsix())
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
@@ -400,10 +504,10 @@ export function packageNativeLocalExtensionsStream(forWeb: boolean, disableMangl
  * @returns a stream
  */
 export function packageAllLocalExtensionsStream(forWeb: boolean, disableMangle: boolean): Stream {
-	return es.merge([
+	return mergeStream(
 		packageNonNativeLocalExtensionsStream(forWeb, disableMangle),
 		packageNativeLocalExtensionsStream(forWeb, disableMangle)
-	]);
+	);
 }
 
 /**
@@ -412,6 +516,36 @@ export function packageAllLocalExtensionsStream(forWeb: boolean, disableMangle: 
  * @param native build the extensions that are marked as having native dependencies
  */
 function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean, native: boolean): Stream {
+	const combineStreams = (streams: Stream[]): Stream => {
+		const output = new PassThrough({ objectMode: true });
+		let pending = streams.length;
+		if (pending === 0) {
+			output.end();
+			return output;
+		}
+
+		for (const stream of streams) {
+			stream.on('error', err => output.emit('error', err));
+			let done = false;
+			const onDone = () => {
+				if (done) {
+					return;
+				}
+				done = true;
+				pending--;
+				if (pending === 0) {
+					output.end();
+				}
+			};
+			stream.on('end', onDone);
+			stream.on('close', onDone);
+			stream.on('finish', onDone);
+			stream.pipe(output, { end: false });
+		}
+
+		return output;
+	};
+
 	const nativeExtensionsSet = new Set(nativeExtensions);
 	const localExtensionsDescriptions = (
 		(<string[]>glob.sync('extensions/*/package.json'))
@@ -426,14 +560,11 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 			.filter(({ name }) => builtInExtensions.every(b => b.name !== name))
 			.filter(({ manifestPath }) => (forWeb ? isWebExtension(require(manifestPath)) : true))
 	);
-	const localExtensionsStream = minifyExtensionResources(
-		es.merge(
-			...localExtensionsDescriptions.map(extension => {
-				return fromLocal(extension.path, forWeb, disableMangle)
-					.pipe(rename(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
-			})
-		)
-	);
+	const localExtensionStreams = localExtensionsDescriptions.map(extension => {
+		return fromLocal(extension.path, forWeb, disableMangle)
+			.pipe(rename(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
+	});
+	const localExtensionsStream = minifyExtensionResources(combineStreams(localExtensionStreams));
 
 	let result: Stream;
 	if (forWeb) {
@@ -443,17 +574,19 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 		const productionDependencies = getProductionDependencies('extensions/');
 		const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
 
-		result = es.merge(
-			localExtensionsStream,
-			gulp.src(dependenciesSrc, { base: '.' })
-				.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
-				.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`))));
+		if (dependenciesSrc.length === 0) {
+			result = localExtensionsStream;
+		} else {
+			result = combineStreams([
+				localExtensionsStream,
+				gulp.src(dependenciesSrc, { base: '.' })
+					.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
+					.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
+			]);
+		}
 	}
 
-	return (
-		result
-			.pipe(util2.setExecutableBit(['**/*.sh']))
-	);
+	return result;
 }
 
 export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
@@ -461,8 +594,15 @@ export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
 		...builtInExtensions.filter(({ name }) => (forWeb ? !marketplaceWebExtensionsExclude.has(name) : true)),
 		...(forWeb ? webBuiltInExtensions : [])
 	];
+
+	if (marketplaceExtensionsDescriptions.length === 0) {
+		const empty = new PassThrough({ objectMode: true });
+		empty.end();
+		return empty;
+	}
+
 	const marketplaceExtensionsStream = minifyExtensionResources(
-		es.merge(
+		mergeStream(
 			...marketplaceExtensionsDescriptions
 				.map(extension => {
 					const src = getExtensionStream(extension).pipe(rename(p => p.dirname = `extensions/${p.dirname}`));
@@ -476,10 +616,7 @@ export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
 		)
 	);
 
-	return (
-		marketplaceExtensionsStream
-			.pipe(util2.setExecutableBit(['**/*.sh']))
-	);
+	return marketplaceExtensionsStream;
 }
 
 export interface IScannedBuiltinExtension {

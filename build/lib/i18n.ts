@@ -6,7 +6,8 @@
 import path from 'path';
 import fs from 'fs';
 
-import { map, merge, through, ThroughStream } from 'event-stream';
+import through2 from 'through2';
+import mergeStream from 'merge-stream';
 import jsonMerge from 'gulp-merge-json';
 import File from 'vinyl';
 import xml2js from 'xml2js';
@@ -344,7 +345,7 @@ function stripComments(content: string): string {
 	return result;
 }
 
-function processCoreBundleFormat(base: string, fileHeader: string, languages: Language[], json: NLSKeysFormat, emitter: ThroughStream) {
+function processCoreBundleFormat(base: string, fileHeader: string, languages: Language[], json: NLSKeysFormat, emitter: NodeJS.ReadWriteStream) {
 	const languageDirectory = path.join(REPO_ROOT_PATH, '..', 'vscode-loc', 'i18n');
 	if (!fs.existsSync(languageDirectory)) {
 		log(`No VS Code localization repository found. Looking at ${languageDirectory}`);
@@ -374,7 +375,7 @@ function processCoreBundleFormat(base: string, fileHeader: string, languages: La
 			}
 		}
 
-		emitter.queue(new File({
+		emitter.push(new File({
 			contents: Buffer.from(`${fileHeader}
 globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(nlsResult)};
 globalThis._VSCODE_NLS_LANGUAGE=${JSON.stringify(language.id)};`),
@@ -384,8 +385,8 @@ globalThis._VSCODE_NLS_LANGUAGE=${JSON.stringify(language.id)};`),
 	});
 }
 
-export function processNlsFiles(opts: { out: string; fileHeader: string; languages: Language[] }): ThroughStream {
-	return through(function (this: ThroughStream, file: File) {
+export function processNlsFiles(opts: { out: string; fileHeader: string; languages: Language[] }): NodeJS.ReadWriteStream {
+	return through2.obj(function (file: File, _enc, callback) {
 		const fileName = path.basename(file.path);
 		if (fileName === 'nls.keys.json') {
 			try {
@@ -398,7 +399,8 @@ export function processNlsFiles(opts: { out: string; fileHeader: string; languag
 				this.emit('error', `Failed to read component file: ${error}`);
 			}
 		}
-		this.queue(file);
+		this.push(file);
+		callback();
 	});
 }
 
@@ -437,8 +439,8 @@ export function getResource(sourceFile: string): Resource {
 }
 
 
-export function createXlfFilesForCoreBundle(): ThroughStream {
-	return through(function (this: ThroughStream, file: File) {
+export function createXlfFilesForCoreBundle(): NodeJS.ReadWriteStream {
+	return through2.obj(function (file: File, _enc, callback) {
 		const basename = path.basename(file.path);
 		if (basename === 'nls.metadata.json') {
 			if (file.isBuffer()) {
@@ -453,7 +455,7 @@ export function createXlfFilesForCoreBundle(): ThroughStream {
 					const messages = json.messages[coreModule];
 					if (keys.length !== messages.length) {
 						this.emit('error', `There is a mismatch between keys and messages in ${file.relative} for module ${coreModule}`);
-						return;
+						return callback();
 					} else {
 						let xlf = xlfs[resource];
 						if (!xlf) {
@@ -470,15 +472,16 @@ export function createXlfFilesForCoreBundle(): ThroughStream {
 						path: filePath,
 						contents: Buffer.from(xlf.toString(), 'utf8')
 					});
-					this.queue(xlfFile);
+					this.push(xlfFile);
 				}
+				callback();
 			} else {
 				this.emit('error', new Error(`File ${file.relative} is not using a buffer content`));
-				return;
+				callback();
 			}
 		} else {
 			this.emit('error', new Error(`File ${file.relative} is not a core meta data file.`));
-			return;
+			callback();
 		}
 	});
 }
@@ -494,8 +497,7 @@ function createL10nBundleForExtension(extensionFolderName: string, prefixWithBui
 			// // For any dependencies pulled in that bundle @vscode/l10n. They needed to export the bundle
 			`${prefix}extensions/${extensionFolderName}/**/bundle.l10n.json`,
 		])
-		.pipe(map(function (data, callback) {
-			const file = data as File;
+		.pipe(through2.obj(function (file: File, _enc, callback) {
 			if (!file.isBuffer()) {
 				// Not a buffer so we drop it
 				callback();
@@ -514,8 +516,7 @@ function createL10nBundleForExtension(extensionFolderName: string, prefixWithBui
 					.catch((err) => {
 						callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
 					});
-				// signal pause?
-				return false;
+				return;
 			}
 
 			// for bundle.l10n.jsons
@@ -553,18 +554,20 @@ export const EXTERNAL_EXTENSIONS = [
 	'ms-vscode.vscode-js-profile-table',
 ];
 
-export function createXlfFilesForExtensions(): ThroughStream {
+export function createXlfFilesForExtensions(): NodeJS.ReadWriteStream {
 	let counter: number = 0;
 	let folderStreamEnded: boolean = false;
 	let folderStreamEndEmitted: boolean = false;
-	return through(function (this: ThroughStream, extensionFolder: File) {
+	return through2.obj(function (extensionFolder: File, _enc, callback) {
 		const folderStream = this;
 		const stat = fs.statSync(extensionFolder.path);
 		if (!stat.isDirectory()) {
+			callback();
 			return;
 		}
 		const extensionFolderName = path.basename(extensionFolder.path);
 		if (extensionFolderName === 'node_modules') {
+			callback();
 			return;
 		}
 		// Get extension id and use that as the id
@@ -580,10 +583,10 @@ export function createXlfFilesForExtensions(): ThroughStream {
 			}
 			return _l10nMap;
 		}
-		merge(
+		mergeStream(
 			gulp.src([`.build/extensions/${extensionFolderName}/package.nls.json`, `.build/extensions/${extensionFolderName}/**/nls.metadata.json`], { allowEmpty: true }),
 			createL10nBundleForExtension(extensionFolderName, EXTERNAL_EXTENSIONS.includes(extensionId))
-		).pipe(through(function (file: File) {
+		).pipe(through2.obj(function (file: File, _enc, cb) {
 			if (file.isBuffer()) {
 				const buffer: Buffer = file.contents as Buffer;
 				const basename = path.basename(file.path);
@@ -611,42 +614,48 @@ export function createXlfFilesForExtensions(): ThroughStream {
 					getL10nMap().set(`extensions/${extensionId}/bundle`, json);
 				} else {
 					this.emit('error', new Error(`${file.path} is not a valid extension nls file`));
+					cb();
 					return;
 				}
 			}
+			cb();
 		}, function () {
 			if (_l10nMap?.size > 0) {
 				const xlfFile = new File({
 					path: path.join(extensionsProject, extensionId + '.xlf'),
 					contents: Buffer.from(getL10nXlf(_l10nMap), 'utf8')
 				});
-				folderStream.queue(xlfFile);
+				folderStream.push(xlfFile);
 			}
-			this.queue(null);
+			this.push(null);
 			counter--;
 			if (counter === 0 && folderStreamEnded && !folderStreamEndEmitted) {
 				folderStreamEndEmitted = true;
-				folderStream.queue(null);
+				folderStream.push(null);
 			}
 		}));
-	}, function () {
+		callback();
+	}, function (callback) {
 		folderStreamEnded = true;
 		if (counter === 0) {
 			folderStreamEndEmitted = true;
-			this.queue(null);
+			this.push(null);
 		}
+		callback();
 	});
 }
 
-export function createXlfFilesForIsl(): ThroughStream {
-	return through(function (this: ThroughStream, file: File) {
+export function createXlfFilesForIsl(): NodeJS.ReadWriteStream {
+	return through2.obj(function (file: File, _enc, callback) {
 		let projectName: string,
 			resourceFile: string;
 		if (path.basename(file.path) === 'messages.en.isl') {
 			projectName = setupProject;
 			resourceFile = 'messages.xlf';
 		} else {
-			throw new Error(`Unknown input file ${file.path}`);
+			this.emit('error', new Error(`Unknown input file ${file.path}`));
+			callback();
+			return;
 		}
 
 		const xlf = new XLF(projectName),
@@ -673,7 +682,8 @@ export function createXlfFilesForIsl(): ThroughStream {
 			}
 			const sections: string[] = line.split('=');
 			if (sections.length !== 2) {
-				throw new Error(`Badly formatted message found: ${line}`);
+				this.emit('error', new Error(`Badly formatted message found: ${line}`));
+				return;
 			} else {
 				const key = sections[0];
 				const value = sections[1];
@@ -690,7 +700,8 @@ export function createXlfFilesForIsl(): ThroughStream {
 		// Emit only upon all ISL files combined into single XLF instance
 		const newFilePath = path.join(projectName, resourceFile);
 		const xlfFile = new File({ path: newFilePath, contents: Buffer.from(xlf.toString(), 'utf-8') });
-		this.queue(xlfFile);
+		this.push(xlfFile);
+		callback();
 	});
 }
 
@@ -745,7 +756,7 @@ export function prepareI18nPackFiles(resultingTranslationPaths: TranslationPath[
 	const mainPack: I18nPack = { version: i18nPackVersion, contents: {} };
 	const extensionsPacks: Record<string, I18nPack> = {};
 	const errors: any[] = [];
-	return through(function (this: ThroughStream, xlf: File) {
+	return through2.obj(function (xlf: File, _enc, callback) {
 		let project = path.basename(path.dirname(path.dirname(xlf.relative)));
 		// strip `-new` since vscode-extensions-loc uses the `-new` suffix to indicate that it's from the new loc pipeline
 		const resource = path.basename(path.basename(xlf.relative, '.xlf'), '-new');
@@ -779,34 +790,39 @@ export function prepareI18nPackFiles(resultingTranslationPaths: TranslationPath[
 		).catch(reason => {
 			errors.push(reason);
 		});
-	}, function () {
+		callback();
+	}, function (callback) {
 		Promise.all(parsePromises)
 			.then(() => {
 				if (errors.length > 0) {
-					throw errors;
+					this.emit('error', errors);
+					callback();
+					return;
 				}
 				const translatedMainFile = createI18nFile('./main', mainPack);
 				resultingTranslationPaths.push({ id: 'vscode', resourceName: 'main.i18n.json' });
 
-				this.queue(translatedMainFile);
+				this.push(translatedMainFile);
 				for (const extensionId in extensionsPacks) {
 					const translatedExtFile = createI18nFile(`extensions/${extensionId}`, extensionsPacks[extensionId]);
-					this.queue(translatedExtFile);
+					this.push(translatedExtFile);
 
 					resultingTranslationPaths.push({ id: extensionId, resourceName: `extensions/${extensionId}.i18n.json` });
 				}
-				this.queue(null);
+				this.push(null);
+				callback();
 			})
 			.catch((reason) => {
 				this.emit('error', reason);
+				callback();
 			});
 	});
 }
 
-export function prepareIslFiles(language: Language, innoSetupConfig: InnoSetup): ThroughStream {
+export function prepareIslFiles(language: Language, innoSetupConfig: InnoSetup): NodeJS.ReadWriteStream {
 	const parsePromises: Promise<l10nJsonDetails[]>[] = [];
 
-	return through(function (this: ThroughStream, xlf: File) {
+	return through2.obj(function (xlf: File, _enc, callback) {
 		const stream = this;
 		const parsePromise = XLF.parse(xlf.contents.toString());
 		parsePromises.push(parsePromise);
@@ -814,17 +830,20 @@ export function prepareIslFiles(language: Language, innoSetupConfig: InnoSetup):
 			resolvedFiles => {
 				resolvedFiles.forEach(file => {
 					const translatedFile = createIslFile(file.name, file.messages, language, innoSetupConfig);
-					stream.queue(translatedFile);
+					stream.push(translatedFile);
 				});
+				callback();
 			}
 		).catch(reason => {
 			this.emit('error', reason);
+			callback();
 		});
-	}, function () {
+	}, function (callback) {
 		Promise.all(parsePromises)
-			.then(() => { this.queue(null); })
+			.then(() => { this.push(null); callback(); })
 			.catch(reason => {
 				this.emit('error', reason);
+				callback();
 			});
 	});
 }

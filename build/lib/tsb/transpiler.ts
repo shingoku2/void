@@ -111,16 +111,16 @@ class TranspileWorker {
 			const [resolve, reject, files, options, t1] = this._pending;
 
 			const outFiles: Vinyl[] = [];
-			const diag: ts.Diagnostic[] = [];
+			const diagnostics: ts.Diagnostic[] = [];
 
 			for (let i = 0; i < res.jsSrcs.length; i++) {
 				// inputs and outputs are aligned across the arrays
 				const file = files[i];
 				const jsSrc = res.jsSrcs[i];
-				const diag = res.diagnostics[i];
+				const fileDiagnostics = res.diagnostics[i];
 
-				if (diag.length > 0) {
-					diag.push(...diag);
+				if (fileDiagnostics.length > 0) {
+					diagnostics.push(...fileDiagnostics);
 					continue;
 				}
 				const enum SuffixTypes {
@@ -151,8 +151,8 @@ class TranspileWorker {
 			this._pending = undefined;
 			this._durations.push(Date.now() - t1);
 
-			if (diag.length > 0) {
-				reject(diag);
+			if (diagnostics.length > 0) {
+				reject(diagnostics);
 			} else {
 				resolve(outFiles);
 			}

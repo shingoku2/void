@@ -41,7 +41,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const path_1 = __importDefault(require("path"));
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const util = __importStar(require("../lib/util"));
 const dependencies_1 = require("../lib/dependencies");
@@ -54,9 +55,9 @@ const credential = new identity_1.ClientAssertionCredential(process.env['AZURE_T
 const [, , base, maps] = process.argv;
 function src(base, maps = `${base}/**/*.map`) {
     return vinyl_fs_1.default.src(maps, { base })
-        .pipe(event_stream_1.default.mapSync((f) => {
+        .pipe(through2_1.default.obj((f, _, cb) => {
         f.path = `${f.base}/core/${f.relative}`;
-        return f;
+        cb(undefined, f);
     }));
 }
 function main() {
@@ -79,10 +80,10 @@ function main() {
         sources.push(src(base, maps));
     }
     return new Promise((c, e) => {
-        event_stream_1.default.merge(...sources)
-            .pipe(event_stream_1.default.through(function (data) {
+        (0, merge_stream_1.default)(...sources)
+            .pipe(through2_1.default.obj(function (data, _, cb) {
             console.log('Uploading Sourcemap', data.relative); // debug
-            this.emit('data', data);
+            cb(undefined, data);
         }))
             .pipe(azure.upload({
             account: process.env.AZURE_STORAGE_ACCOUNT,

@@ -7,13 +7,19 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import rimraf from 'rimraf';
-import es from 'event-stream';
 import rename from 'gulp-rename';
 import vfs from 'vinyl-fs';
 import * as ext from './extensions';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
-import { Stream } from 'stream';
+import { Stream, PassThrough } from 'stream';
+import mergeStream from 'merge-stream';
+
+function emptyStream(): Stream {
+	const s = new PassThrough();
+	s.end();
+	return s;
+}
 
 export interface IExtensionDefinition {
 	name: string;
@@ -98,7 +104,7 @@ function syncMarketplaceExtension(extension: IExtensionDefinition): Stream {
 	const source = ansiColors.blue(galleryServiceUrl ? '[marketplace]' : '[github]');
 	if (isUpToDate(extension)) {
 		log(source, `${extension.name}@${extension.version}`, ansiColors.green('✔︎'));
-		return es.readArray([]);
+		return emptyStream();
 	}
 
 	rimraf.sync(getExtensionPath(extension));
@@ -114,14 +120,14 @@ function syncExtension(extension: IExtensionDefinition, controlState: 'disabled'
 
 		if (!platforms.has(process.platform)) {
 			log(ansiColors.gray('[skip]'), `${extension.name}@${extension.version}: Platform '${process.platform}' not supported: [${extension.platforms}]`, ansiColors.green('✔︎'));
-			return es.readArray([]);
+			return emptyStream();
 		}
 	}
 
 	switch (controlState) {
 		case 'disabled':
 			log(ansiColors.blue('[disabled]'), ansiColors.gray(extension.name));
-			return es.readArray([]);
+			return emptyStream();
 
 		case 'marketplace':
 			return syncMarketplaceExtension(extension);
@@ -129,15 +135,15 @@ function syncExtension(extension: IExtensionDefinition, controlState: 'disabled'
 		default:
 			if (!fs.existsSync(controlState)) {
 				log(ansiColors.red(`Error: Built-in extension '${extension.name}' is configured to run from '${controlState}' but that path does not exist.`));
-				return es.readArray([]);
+				return emptyStream();
 
 			} else if (!fs.existsSync(path.join(controlState, 'package.json'))) {
 				log(ansiColors.red(`Error: Built-in extension '${extension.name}' is configured to run from '${controlState}' but there is no 'package.json' file in that directory.`));
-				return es.readArray([]);
+				return emptyStream();
 			}
 
 			log(ansiColors.blue('[local]'), `${extension.name}: ${ansiColors.cyan(controlState)}`, ansiColors.green('✔︎'));
-			return es.readArray([]);
+			return emptyStream();
 	}
 }
 
@@ -175,7 +181,7 @@ export function getBuiltInExtensions(): Promise<void> {
 	writeControlFile(control);
 
 	return new Promise((resolve, reject) => {
-		es.merge(streams)
+		mergeStream(streams)
 			.on('error', reject)
 			.on('end', resolve);
 	});

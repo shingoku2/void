@@ -353,9 +353,16 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		if (!encryptedState)
 			return defaultState()
 
-		const stateStr = await this._encryptionService.decrypt(encryptedState)
-		const state = JSON.parse(stateStr)
-		return state
+		// Error handling: If stored state is corrupted or decryption fails, fall back to
+		// defaults. This ensures Void can still function even if user settings are corrupted.
+		try {
+			const stateStr = await this._encryptionService.decrypt(encryptedState)
+			const state = JSON.parse(stateStr)
+			return state
+		} catch (e) {
+			console.error('Void: Failed to read settings, resetting to defaults. Error:', e);
+			return defaultState()
+		}
 	}
 
 

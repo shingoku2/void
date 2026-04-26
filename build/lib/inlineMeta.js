@@ -8,7 +8,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.inlineMeta = inlineMeta;
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
 const path_1 = require("path");
 const packageJsonMarkerId = 'BUILD_INSERT_PACKAGE_CONFIGURATION';
 // TODO in order to inline `product.json`, more work is
@@ -19,7 +19,7 @@ const packageJsonMarkerId = 'BUILD_INSERT_PACKAGE_CONFIGURATION';
 // - a `target` is added in `gulpfile.vscode.win32.js`
 // const productJsonMarkerId = 'BUILD_INSERT_PRODUCT_CONFIGURATION';
 function inlineMeta(result, ctx) {
-    return result.pipe(event_stream_1.default.through(function (file) {
+    return result.pipe(through2_1.default.obj(function (file, _enc, callback) {
         if (matchesFile(file, ctx)) {
             let content = file.contents.toString();
             let markerFound = false;
@@ -37,7 +37,7 @@ function inlineMeta(result, ctx) {
                 file.contents = Buffer.from(content);
             }
         }
-        this.emit('data', file);
+        callback(null, file);
     }));
 }
 function matchesFile(file, ctx) {

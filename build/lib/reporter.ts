@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import through2 from 'through2';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
 import fs from 'fs';
 import path from 'path';
+import { Transform, PassThrough } from 'stream';
 
 class ErrorLog {
 	constructor(public id: string) {
@@ -98,26 +99,57 @@ export function createReporter(id?: string): IReporter {
 	result.hasErrors = () => errors.length > 0;
 
 	result.end = (emitError: boolean): NodeJS.ReadWriteStream => {
-		errors.length = 0;
 		errorLog.onStart();
 
-		return es.through(undefined, function () {
-			errorLog.onEnd();
+		let flushed = false;
 
-			if (emitError && errors.length > 0) {
-				if (!(errors as any).__logged__) {
-					errorLog.log();
+		// Use a proper Transform stream that explicitly controls its lifecycle
+		const transform = new Transform({
+			objectMode: true,
+			transform(chunk, encoding, callback) {
+				this.push(chunk);
+				callback();
+			},
+			flush(callback) {
+				if (flushed) {
+					callback();
+					return;
 				}
+				flushed = true;
 
-				(errors as any).__logged__ = true;
+				errorLog.onEnd();
 
-				const err = new Error(`Found ${errors.length} errors`);
-				(err as any).__reporter__ = true;
-				this.emit('error', err);
-			} else {
-				this.emit('end');
+				if (emitError && errors.length > 0) {
+					if (!(errors as any).__logged__) {
+						errorLog.log();
+					}
+					(errors as any).__logged__ = true;
+					const err = new Error(`Found ${errors.length} errors`);
+					(err as any).__reporter__ = true;
+					// Emit error after a tick to ensure proper async signaling
+					process.nextTick(() => {
+						transform.emit('error', err);
+					});
+				}
+				callback();
 			}
 		});
+
+		// Create a wrapper that forces objectMode and passes through all data
+		const wrapped = through2.obj(
+			function(chunk, encoding, callback) {
+				this.push(chunk);
+				callback();
+			},
+			function(callback) {
+				callback();
+			}
+		);
+
+		// Pipe transform to wrapped - this should maintain objectMode
+		transform.pipe(wrapped);
+
+		return wrapped;
 	};
 
 	return result;

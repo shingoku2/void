@@ -9,10 +9,10 @@ exports.gulpPostcss = gulpPostcss;
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 const postcss_1 = __importDefault(require("postcss"));
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
 function gulpPostcss(plugins, handleError) {
     const instance = (0, postcss_1.default)(plugins);
-    return event_stream_1.default.map((file, callback) => {
+    return through2_1.default.obj((file, callback) => {
         if (file.isNull()) {
             return callback(null, file);
         }
@@ -36,4 +36,3 @@ function gulpPostcss(plugins, handleError) {
         });
     });
 }
-//# sourceMappingURL=postcss.js.map

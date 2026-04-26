@@ -65,4 +65,3 @@ class StaticLanguageServiceHost {
     realpath = typescript_1.default.sys.realpath;
 }
 exports.StaticLanguageServiceHost = StaticLanguageServiceHost;
-//# sourceMappingURL=staticLanguageServiceHost.js.map

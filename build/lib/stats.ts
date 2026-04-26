@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import through2 from 'through2';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
 import File from 'vinyl';
@@ -35,12 +35,12 @@ class Entry {
 
 const _entries = new Map<string, Entry>();
 
-export function createStatsStream(group: string, log?: boolean): es.ThroughStream {
+export function createStatsStream(group: string, log?: boolean): NodeJS.ReadWriteStream {
 
 	const entry = new Entry(group, 0, 0);
 	_entries.set(entry.name, entry);
 
-	return es.through(function (data) {
+	return through2.obj(function (data, _enc, callback) {
 		const file = data as File;
 		if (typeof file.path === 'string') {
 			entry.totalCount += 1;
@@ -52,8 +52,8 @@ export function createStatsStream(group: string, log?: boolean): es.ThroughStrea
 				// funky file...
 			}
 		}
-		this.emit('data', data);
-	}, function () {
+		callback(null, data);
+	}, function (callback) {
 		if (log) {
 			if (entry.totalCount === 1) {
 				fancyLog(`Stats for '${ansiColors.grey(entry.name)}': ${Math.round(entry.totalSize / 1204)}KB`);
@@ -67,6 +67,6 @@ export function createStatsStream(group: string, log?: boolean): es.ThroughStrea
 			}
 		}
 
-		this.emit('end');
+		callback();
 	});
 }

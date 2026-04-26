@@ -9,7 +9,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.nls = nls;
 const lazy_js_1 = __importDefault(require("lazy.js"));
-const event_stream_1 = require("event-stream");
+const stream_1 = require("stream");
+const through2_1 = __importDefault(require("through2"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const source_map_1 = __importDefault(require("source-map"));
 const path_1 = __importDefault(require("path"));
@@ -47,10 +48,10 @@ function clone(object) {
  */
 function nls(options) {
     let base;
-    const input = (0, event_stream_1.through)();
+    const input = (0, through2_1.default)();
     const output = input
-        .pipe((0, gulp_sort_1.default)()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
-        .pipe((0, event_stream_1.through)(function (f) {
+        .pipe((0, gulp_sort_1.default)())
+        .pipe((0, through2_1.default)(function (f) {
         if (!f.sourceMap) {
             return this.emit('error', new Error(`File ${f.relative} does not have sourcemaps.`));
         }
@@ -101,7 +102,13 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
         }
         this.emit('end');
     }));
-    return (0, event_stream_1.duplex)(input, output);
+    return createDuplex(input, output);
+}
+function createDuplex(input, output) {
+    const passThrough = new stream_1.PassThrough();
+    input.pipe(passThrough);
+    passThrough.pipe(output);
+    return passThrough;
 }
 function isImportNode(ts, node) {
     return node.kind === ts.SyntaxKind.ImportDeclaration || node.kind === ts.SyntaxKind.ImportEqualsDeclaration;
@@ -408,4 +415,3 @@ var _nls;
     }
     _nls.patchFile = patchFile;
 })(_nls || (_nls = {}));
-//# sourceMappingURL=nls.js.map

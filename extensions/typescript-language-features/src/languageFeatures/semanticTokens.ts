@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { DocumentSelector } from '../configuration/documentSelector';
-import * as Proto from '../tsServer/protocol/protocol';
+import type * as Proto from '../tsServer/protocol/protocol';
 import { ClientCapability, ITypeScriptServiceClient } from '../typescriptService';
 import { conditionalRegistration, requireSomeCapability } from './util/dependentRegistration';
 

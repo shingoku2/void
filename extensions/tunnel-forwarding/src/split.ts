@@ -23,7 +23,10 @@ export class StreamSplitter extends Transform {
 		if (!this.buffer) {
 			this.buffer = chunk;
 		} else {
-			this.buffer = Buffer.concat([this.buffer, chunk]);
+			const combined = Buffer.allocUnsafe(this.buffer.length + chunk.length);
+			combined.set(this.buffer, 0);
+			combined.set(chunk, this.buffer.length);
+			this.buffer = combined;
 		}
 
 		let offset = 0;

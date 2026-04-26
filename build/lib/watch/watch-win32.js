@@ -11,8 +11,9 @@ const path_1 = __importDefault(require("path"));
 const child_process_1 = __importDefault(require("child_process"));
 const fs_1 = __importDefault(require("fs"));
 const vinyl_1 = __importDefault(require("vinyl"));
-const event_stream_1 = __importDefault(require("event-stream"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
+const stream_1 = require("stream");
+const through2_1 = __importDefault(require("through2"));
 const watcherPath = path_1.default.join(__dirname, 'watcher.exe');
 function toChangeType(type) {
     switch (type) {
@@ -22,7 +23,7 @@ function toChangeType(type) {
     }
 }
 function watch(root) {
-    const result = event_stream_1.default.through();
+    const result = new stream_1.PassThrough();
     let child = child_process_1.default.spawn(watcherPath, [root]);
     child.stdout.on('data', function (data) {
         const lines = data.toString('utf8').split('\n');
@@ -68,14 +69,16 @@ module.exports = function (pattern, options) {
     if (!watcher) {
         watcher = cache[cwd] = watch(cwd);
     }
-    const rebase = !options.base ? event_stream_1.default.through() : event_stream_1.default.mapSync(function (f) {
-        f.base = options.base;
-        return f;
-    });
+    const rebase = !options.base
+        ? through2_1.default.obj()
+        : through2_1.default.obj(function (f, _enc, cb) {
+            f.base = options.base;
+            cb(null, f);
+        });
     return watcher
         .pipe((0, gulp_filter_1.default)(['**', '!.git{,/**}'], { dot: options.dot })) // ignore all things git
         .pipe((0, gulp_filter_1.default)(pattern, { dot: options.dot }))
-        .pipe(event_stream_1.default.map(function (file, cb) {
+        .pipe(through2_1.default.obj(function (file, _enc, cb) {
         fs_1.default.stat(file.path, function (err, stat) {
             if (err && err.code === 'ENOENT') {
                 return cb(undefined, file);

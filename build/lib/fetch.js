@@ -10,12 +10,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchUrls = fetchUrls;
 exports.fetchUrl = fetchUrl;
 exports.fetchGithub = fetchGithub;
-const event_stream_1 = __importDefault(require("event-stream"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
 const crypto_1 = __importDefault(require("crypto"));
 const through2_1 = __importDefault(require("through2"));
+const stream_1 = require("stream");
 function fetchUrls(urls, options) {
     if (options === undefined) {
         options = {};
@@ -26,7 +26,7 @@ function fetchUrls(urls, options) {
     if (!Array.isArray(urls)) {
         urls = [urls];
     }
-    return event_stream_1.default.readArray(urls).pipe(event_stream_1.default.map((data, cb) => {
+    return stream_1.Readable.from(urls).pipe(through2_1.default.obj((data, cb) => {
         const url = [options.base, data].join('');
         fetchUrl(url, options).then(file => {
             cb(undefined, file);

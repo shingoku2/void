@@ -46,12 +46,18 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const rimraf_1 = __importDefault(require("rimraf"));
-const event_stream_1 = __importDefault(require("event-stream"));
 const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const ext = __importStar(require("./extensions"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
+const stream_1 = require("stream");
+const merge_stream_1 = __importDefault(require("merge-stream"));
+function emptyStream() {
+    const s = new stream_1.PassThrough();
+    s.end();
+    return s;
+}
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const productjson = JSON.parse(fs_1.default.readFileSync(path_1.default.join(__dirname, '../../product.json'), 'utf8'));
 const builtInExtensions = productjson.builtInExtensions || [];
@@ -107,7 +113,7 @@ function syncMarketplaceExtension(extension) {
     const source = ansi_colors_1.default.blue(galleryServiceUrl ? '[marketplace]' : '[github]');
     if (isUpToDate(extension)) {
         log(source, `${extension.name}@${extension.version}`, ansi_colors_1.default.green('✔︎'));
-        return event_stream_1.default.readArray([]);
+        return emptyStream();
     }
     rimraf_1.default.sync(getExtensionPath(extension));
     return getExtensionDownloadStream(extension)
@@ -119,26 +125,26 @@ function syncExtension(extension, controlState) {
         const platforms = new Set(extension.platforms);
         if (!platforms.has(process.platform)) {
             log(ansi_colors_1.default.gray('[skip]'), `${extension.name}@${extension.version}: Platform '${process.platform}' not supported: [${extension.platforms}]`, ansi_colors_1.default.green('✔︎'));
-            return event_stream_1.default.readArray([]);
+            return emptyStream();
         }
     }
     switch (controlState) {
         case 'disabled':
             log(ansi_colors_1.default.blue('[disabled]'), ansi_colors_1.default.gray(extension.name));
-            return event_stream_1.default.readArray([]);
+            return emptyStream();
         case 'marketplace':
             return syncMarketplaceExtension(extension);
         default:
             if (!fs_1.default.existsSync(controlState)) {
                 log(ansi_colors_1.default.red(`Error: Built-in extension '${extension.name}' is configured to run from '${controlState}' but that path does not exist.`));
-                return event_stream_1.default.readArray([]);
+                return emptyStream();
             }
             else if (!fs_1.default.existsSync(path_1.default.join(controlState, 'package.json'))) {
                 log(ansi_colors_1.default.red(`Error: Built-in extension '${extension.name}' is configured to run from '${controlState}' but there is no 'package.json' file in that directory.`));
-                return event_stream_1.default.readArray([]);
+                return emptyStream();
             }
             log(ansi_colors_1.default.blue('[local]'), `${extension.name}: ${ansi_colors_1.default.cyan(controlState)}`, ansi_colors_1.default.green('✔︎'));
-            return event_stream_1.default.readArray([]);
+            return emptyStream();
     }
 }
 function readControlFile() {
@@ -165,7 +171,7 @@ function getBuiltInExtensions() {
     }
     writeControlFile(control);
     return new Promise((resolve, reject) => {
-        event_stream_1.default.merge(streams)
+        (0, merge_stream_1.default)(streams)
             .on('error', reject)
             .on('end', resolve);
     });

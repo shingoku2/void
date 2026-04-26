@@ -9,7 +9,9 @@ require('events').EventEmitter.defaultMaxListeners = 100;
 const gulp = require('gulp');
 const path = require('path');
 const nodeUtil = require('util');
-const es = require('event-stream');
+const { Transform, PassThrough } = require('stream');
+const through2 = require('through2');
+const mergeStream = require('merge-stream');
 const filter = require('gulp-filter');
 const util = require('./lib/util');
 const { getVersion } = require('./lib/getVersion');
@@ -90,6 +92,7 @@ const tasks = compilations.map(function (tsconfigFile) {
 	const srcOpts = { cwd: root, base: srcBase, dot: true };
 
 	const out = path.join(srcRoot, 'out');
+	const outRootPath = path.resolve(root, out) + path.sep;
 	const baseUrl = getBaseUrl(out);
 
 	let headerId, headerOut;
@@ -102,11 +105,24 @@ const tasks = compilations.map(function (tsconfigFile) {
 		headerOut = relativeDirname.substr(index + 1) + '/out';
 	}
 
+	// Create a proper duplex stream that combines input and output
+	function createDuplex(input, output) {
+		const { PassThrough } = require('stream');
+		// Create a wrapper stream that combines input and output
+		const wrapper = new PassThrough({ objectMode: true });
+		// Pipe input to output
+		input.pipe(output);
+		// Forward output data through wrapper
+		output.pipe(wrapper);
+		return wrapper;
+	}
+
 	function createPipeline(build, emitError, transpileOnly) {
 		const tsb = require('./lib/tsb');
 		const sourcemaps = require('gulp-sourcemaps');
 
 		const reporter = createReporter('extensions');
+		const extensionRootPath = path.resolve(root, srcRoot) + path.sep;
 
 		overrideOptions.inlineSources = Boolean(build);
 		overrideOptions.base = path.dirname(absolutePath);
@@ -114,7 +130,7 @@ const tasks = compilations.map(function (tsconfigFile) {
 		const compilation = tsb.create(absolutePath, overrideOptions, { verbose: false, transpileOnly, transpileOnlyIncludesDts: transpileOnly, transpileWithSwc: true }, err => reporter(err.toString()));
 
 		const pipeline = function () {
-			const input = es.through();
+			const input = through2({ objectMode: true });
 			const tsFilter = filter(['**/*.ts', '!**/lib/lib*.d.ts', '!**/node_modules/**'], { restore: true, dot: true });
 			const output = input
 				.pipe(plumber({
@@ -127,7 +143,7 @@ const tasks = compilations.map(function (tsconfigFile) {
 				.pipe(tsFilter)
 				.pipe(util.loadSourcemaps())
 				.pipe(compilation())
-				.pipe(build ? util.stripSourceMappingURL() : es.through())
+				.pipe(build ? util.stripSourceMappingURL() : through2({ objectMode: true }))
 				.pipe(sourcemaps.write('.', {
 					sourceMappingURL: !build ? null : f => `${baseUrl}/${f.relative}.map`,
 					addComment: !!build,
@@ -136,9 +152,16 @@ const tasks = compilations.map(function (tsconfigFile) {
 					sourceRoot: '../src/',
 				}))
 				.pipe(tsFilter.restore)
+				.pipe(through2.obj((file, _enc, callback) => {
+					if (path.resolve(file.path).startsWith(extensionRootPath)) {
+						callback(null, file);
+					} else {
+						callback();
+					}
+				}))
 				.pipe(reporter.end(emitError));
 
-			return es.duplex(input, output);
+			return createDuplex(input, output);
 		};
 
 		// add src-stream for project files
@@ -153,27 +176,41 @@ const tasks = compilations.map(function (tsconfigFile) {
 	const transpileTask = task.define(`transpile-extension:${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(false, true, true);
 		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
-		const input = es.merge(nonts, pipeline.tsProjectSrc());
+		const input = mergeStream(nonts, pipeline.tsProjectSrc());
 
 		return input
 			.pipe(pipeline())
+			.pipe(through2.obj((file, _enc, callback) => {
+				if (path.resolve(file.path).startsWith(outRootPath)) {
+					callback(null, file);
+				} else {
+					callback();
+				}
+			}))
 			.pipe(gulp.dest(out));
 	}));
 
 	const compileTask = task.define(`compile-extension:${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(false, true);
 		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
-		const input = es.merge(nonts, pipeline.tsProjectSrc());
+		const input = mergeStream(nonts, pipeline.tsProjectSrc());
 
 		return input
 			.pipe(pipeline())
+			.pipe(through2.obj((file, _enc, callback) => {
+				if (path.resolve(file.path).startsWith(outRootPath)) {
+					callback(null, file);
+				} else {
+					callback();
+				}
+			}))
 			.pipe(gulp.dest(out));
 	}));
 
 	const watchTask = task.define(`watch-extension:${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(false);
 		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
-		const input = es.merge(nonts, pipeline.tsProjectSrc());
+		const input = mergeStream(nonts, pipeline.tsProjectSrc());
 		const watchInput = watcher(src, { ...srcOpts, ...{ readDelay: 200 } });
 
 		return watchInput
@@ -184,10 +221,17 @@ const tasks = compilations.map(function (tsconfigFile) {
 	const compileBuildTask = task.define(`compile-build-extension-${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(true, true);
 		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
-		const input = es.merge(nonts, pipeline.tsProjectSrc());
+		const input = mergeStream(nonts, pipeline.tsProjectSrc());
 
 		return input
 			.pipe(pipeline())
+			.pipe(through2.obj((file, _enc, callback) => {
+				if (path.resolve(file.path).startsWith(outRootPath)) {
+					callback(null, file);
+				} else {
+					callback();
+				}
+			}))
 			.pipe(gulp.dest(out));
 	}));
 

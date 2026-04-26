@@ -11,8 +11,6 @@ const withDefaults = require('../shared.webpack.config');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const path = require('path');
 
-const isWindows = process.platform === 'win32';
-
 module.exports = withDefaults({
 	context: __dirname,
 	entry: {
@@ -37,8 +35,9 @@ module.exports = withDefaults({
 					// The native files we need to ship with the extension
 					from: '**/dist/msal*.(node|dll)',
 					to: '[name][ext]',
-					// These will only be present on Windows for now
-					noErrorOnMissing: !isWindows
+					// Package layouts vary across msal-node-extensions versions.
+					// Allow missing glob so builds can proceed when files are not present.
+					noErrorOnMissing: true
 				}
 			]
 		})

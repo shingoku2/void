@@ -3,18 +3,65 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import through2 from 'through2';
 import _debounce from 'debounce';
 import _filter from 'gulp-filter';
 import rename from 'gulp-rename';
 import path from 'path';
 import fs from 'fs';
-import _rimraf from 'rimraf';
+import stream from 'stream';
+import * as _rimraf from 'rimraf';
 import VinylFile from 'vinyl';
-import { ThroughStream } from 'through';
 import sm from 'source-map';
 import { pathToFileURL } from 'url';
-import ternaryStream from 'ternary-stream';
+import mergeStream from 'merge-stream';
+
+function duplex(input: NodeJS.ReadWriteStream, output: NodeJS.ReadWriteStream): NodeJS.ReadWriteStream {
+	const combined = new stream.Duplex({
+		objectMode: true,
+		write(chunk, enc, cb) {
+			if ((input as any).write(chunk, enc)) {
+				cb();
+			} else {
+				input.once('drain', cb);
+			}
+		},
+		final(cb) {
+			(input as any).end();
+			cb();
+		},
+		read() { }
+	});
+
+	output.on('data', (chunk: unknown) => {
+		if (!combined.push(chunk)) {
+			if (typeof (output as any).pause === 'function') {
+				(output as any).pause();
+			}
+		}
+	});
+	combined.on('drain', () => {
+		if (typeof (output as any).resume === 'function') {
+			(output as any).resume();
+		}
+	});
+
+	output.on('end', () => combined.push(null));
+	output.on('error', err => combined.destroy(err));
+	input.on('error', err => combined.destroy(err));
+
+	return combined as unknown as NodeJS.ReadWriteStream;
+}
+
+function readableFromArray<T>(array: T[]): NodeJS.ReadWriteStream {
+	const { PassThrough } = require('stream');
+	const pt = new PassThrough({ objectMode: true });
+	for (const item of array) {
+		pt.write(item);
+	}
+	pt.end();
+	return pt;
+}
 
 const root = path.dirname(path.dirname(__dirname));
 
@@ -29,8 +76,8 @@ export interface IStreamProvider {
 }
 
 export function incremental(streamProvider: IStreamProvider, initial: NodeJS.ReadWriteStream, supportsCancellation?: boolean): NodeJS.ReadWriteStream {
-	const input = es.through();
-	const output = es.through();
+	const input = through2.obj();
+	const output = through2();
 	let state = 'idle';
 	let buffer = Object.create(null);
 
@@ -43,7 +90,7 @@ export function incremental(streamProvider: IStreamProvider, initial: NodeJS.Rea
 
 		input
 			.pipe(stream)
-			.pipe(es.through(undefined, () => {
+			.pipe(through2(undefined, () => {
 				state = 'idle';
 				eventuallyRun();
 			}))
@@ -63,7 +110,7 @@ export function incremental(streamProvider: IStreamProvider, initial: NodeJS.Rea
 
 		const data = paths.map(path => buffer[path]);
 		buffer = Object.create(null);
-		run(es.readArray(data), true);
+		run(readableFromArray(data), true);
 	}, 500);
 
 	input.on('data', (f: any) => {
@@ -74,19 +121,19 @@ export function incremental(streamProvider: IStreamProvider, initial: NodeJS.Rea
 		}
 	});
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function debounce(task: () => NodeJS.ReadWriteStream, duration = 500): NodeJS.ReadWriteStream {
-	const input = es.through();
-	const output = es.through();
+	const input = through2.obj();
+	const output = through2();
 	let state = 'idle';
 
 	const run = () => {
 		state = 'running';
 
 		task()
-			.pipe(es.through(undefined, () => {
+			.pipe(through2(undefined, () => {
 				const shouldRunAgain = state === 'stale';
 				state = 'idle';
 
@@ -109,44 +156,44 @@ export function debounce(task: () => NodeJS.ReadWriteStream, duration = 500): No
 		}
 	});
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function fixWin32DirectoryPermissions(): NodeJS.ReadWriteStream {
 	if (!/win32/.test(process.platform)) {
-		return es.through();
+		return through2();
 	}
 
-	return es.mapSync<VinylFile, VinylFile>(f => {
+	return through2.obj<VinylFile, VinylFile>(function (f, _enc, cb) {
 		if (f.stat && f.stat.isDirectory && f.stat.isDirectory()) {
 			f.stat.mode = 16877;
 		}
 
-		return f;
+		cb(null, f);
 	});
 }
 
 export function setExecutableBit(pattern?: string | string[]): NodeJS.ReadWriteStream {
-	const setBit = es.mapSync<VinylFile, VinylFile>(f => {
+	const setBit = through2.obj<VinylFile, VinylFile>(function (f, _enc, cb) {
 		if (!f.stat) {
 			f.stat = { isFile() { return true; } } as any;
 		}
 		f.stat.mode = /* 100755 */ 33261;
-		return f;
+		cb(null, f);
 	});
 
 	if (!pattern) {
 		return setBit;
 	}
 
-	const input = es.through();
+	const input = through2.obj();
 	const filter = _filter(pattern, { restore: true });
 	const output = input
 		.pipe(filter)
 		.pipe(setBit)
 		.pipe(filter.restore);
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function toFileUri(filePath: string): string {
@@ -160,9 +207,11 @@ export function toFileUri(filePath: string): string {
 }
 
 export function skipDirectories(): NodeJS.ReadWriteStream {
-	return es.mapSync<VinylFile, VinylFile | undefined>(f => {
+	return through2.obj<VinylFile, VinylFile>(function(f, enc, cb) {
 		if (!f.isDirectory()) {
-			return f;
+			cb(null, f);
+		} else {
+			cb();
 		}
 	});
 }
@@ -176,13 +225,13 @@ export function cleanNodeModules(rulePath: string): NodeJS.ReadWriteStream {
 	const excludes = rules.filter(line => !/^!/.test(line)).map(line => `!**/node_modules/${line}`);
 	const includes = rules.filter(line => /^!/.test(line)).map(line => `**/node_modules/${line.substr(1)}`);
 
-	const input = es.through();
-	const output = es.merge(
+	const input = through2.obj();
+	const output = mergeStream(
 		input.pipe(_filter(['**', ...excludes])),
 		input.pipe(_filter(includes))
 	);
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 declare class FileSourceMap extends VinylFile {
@@ -190,10 +239,10 @@ declare class FileSourceMap extends VinylFile {
 }
 
 export function loadSourcemaps(): NodeJS.ReadWriteStream {
-	const input = es.through();
+	const input = through2.obj();
 
 	const output = input
-		.pipe(es.map<FileSourceMap, FileSourceMap | undefined>((f, cb): FileSourceMap | undefined => {
+		.pipe(through2.obj<FileSourceMap, FileSourceMap>(function(f, cb) {
 			if (f.sourceMap) {
 				cb(undefined, f);
 				return;
@@ -237,60 +286,82 @@ export function loadSourcemaps(): NodeJS.ReadWriteStream {
 			});
 		}));
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function stripSourceMappingURL(): NodeJS.ReadWriteStream {
-	const input = es.through();
+	const input = through2.obj();
 
 	const output = input
-		.pipe(es.mapSync<VinylFile, VinylFile>(f => {
+		.pipe(through2.obj<VinylFile, VinylFile>(function (f, _enc, cb) {
 			const contents = (<Buffer>f.contents).toString('utf8');
 			f.contents = Buffer.from(contents.replace(/\n\/\/# sourceMappingURL=(.*)$/gm, ''), 'utf8');
-			return f;
+			cb(null, f);
 		}));
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 /** Splits items in the stream based on the predicate, sending them to onTrue if true, or onFalse otherwise */
-export function $if(test: boolean | ((f: VinylFile) => boolean), onTrue: NodeJS.ReadWriteStream, onFalse: NodeJS.ReadWriteStream = es.through()) {
+export function $if(test: boolean | ((f: VinylFile) => boolean), onTrue: NodeJS.ReadWriteStream, onFalse: NodeJS.ReadWriteStream = through2.obj()) {
 	if (typeof test === 'boolean') {
 		return test ? onTrue : onFalse;
 	}
 
-	return ternaryStream(test, onTrue, onFalse);
+	const input = through2.obj<VinylFile, VinylFile>();
+	const onTrueInput = through2.obj<VinylFile, VinylFile>();
+	const onFalseInput = through2.obj<VinylFile, VinylFile>();
+	const output = mergeStream(
+		onTrueInput.pipe(onTrue),
+		onFalseInput.pipe(onFalse)
+	);
+
+	const router = through2.obj<VinylFile, VinylFile>(function (file, _enc, cb) {
+		if (test(file)) {
+			onTrueInput.write(file);
+		} else {
+			onFalseInput.write(file);
+		}
+		cb();
+	}, function (cb) {
+		onTrueInput.end();
+		onFalseInput.end();
+		cb();
+	});
+
+	input.pipe(router);
+	return duplex(input, output);
 }
 
 /** Operator that appends the js files' original path a sourceURL, so debug locations map */
 export function appendOwnPathSourceURL(): NodeJS.ReadWriteStream {
-	const input = es.through();
+	const input = through2.obj();
 
 	const output = input
-		.pipe(es.mapSync<VinylFile, VinylFile>(f => {
+		.pipe(through2.obj<VinylFile, VinylFile>(function (f, _enc, cb) {
 			if (!(f.contents instanceof Buffer)) {
-				throw new Error(`contents of ${f.path} are not a buffer`);
+				return cb(new Error(`contents of ${f.path} are not a buffer`));
 			}
 
 			f.contents = Buffer.concat([f.contents, Buffer.from(`\n//# sourceURL=${pathToFileURL(f.path)}`)]);
-			return f;
+			cb(null, f);
 		}));
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function rewriteSourceMappingURL(sourceMappingURLBase: string): NodeJS.ReadWriteStream {
-	const input = es.through();
+	const input = through2.obj();
 
 	const output = input
-		.pipe(es.mapSync<VinylFile, VinylFile>(f => {
+		.pipe(through2.obj<VinylFile, VinylFile>(function (f, _enc, cb) {
 			const contents = (<Buffer>f.contents).toString('utf8');
 			const str = `//# sourceMappingURL=${sourceMappingURLBase}/${path.dirname(f.relative).replace(/\\/g, '/')}/$1`;
 			f.contents = Buffer.from(contents.replace(/\n\/\/# sourceMappingURL=(.*)$/gm, str));
-			return f;
+			cb(null, f);
 		}));
 
-	return es.duplex(input, output);
+	return duplex(input, output);
 }
 
 export function rimraf(dir: string): () => Promise<void> {
@@ -298,17 +369,14 @@ export function rimraf(dir: string): () => Promise<void> {
 		let retries = 0;
 
 		const retry = () => {
-			_rimraf(dir, { maxBusyTries: 1 }, (err: any) => {
-				if (!err) {
-					return c();
-				}
-
-				if (err.code === 'ENOTEMPTY' && ++retries < 5) {
-					return setTimeout(() => retry(), 10);
-				}
-
-				return e(err);
-			});
+			_rimraf.rimraf(dir, { maxBusyTries: 1 })
+				.then(() => c())
+				.catch((err: any) => {
+					if (err.code === 'ENOTEMPTY' && ++retries < 5) {
+						return setTimeout(() => retry(), 10);
+					}
+					return e(err);
+				});
 		};
 
 		retry();
@@ -351,19 +419,23 @@ export function rebase(count: number): NodeJS.ReadWriteStream {
 }
 
 export interface FilterStream extends NodeJS.ReadWriteStream {
-	restore: ThroughStream;
+	restore: NodeJS.ReadWriteStream;
 }
 
 export function filter(fn: (data: any) => boolean): FilterStream {
-	const result = <FilterStream><any>es.through(function (data) {
+	const result = <FilterStream><any>through2.obj(function (data, _enc, cb) {
 		if (fn(data)) {
-			this.emit('data', data);
+			this.push(data);
 		} else {
-			result.restore.push(data);
+			(result as any).restore.push(data);
 		}
+		cb();
+	}, function (cb) {
+		(result as any).restore.end();
+		cb();
 	});
 
-	result.restore = es.through();
+	result.restore = through2.obj();
 	return result;
 }
 

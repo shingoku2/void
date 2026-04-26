@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 const gulp = require('gulp');
-const es = require('event-stream');
+const through2 = require('through2');
 const path = require('path');
 const task = require('./lib/task');
 const { hygiene } = require('./hygiene');
@@ -38,10 +38,11 @@ function checkPackageJSON(actualPath) {
 
 const checkPackageJSONTask = task.define('check-package-json', () => {
 	return gulp.src('package.json').pipe(
-		es.through(function () {
+		through2.obj(function (_file, _enc, cb) {
 			checkPackageJSON.call(this, 'remote/package.json');
 			checkPackageJSON.call(this, 'remote/web/package.json');
 			checkPackageJSON.call(this, 'build/package.json');
+			cb();
 		})
 	);
 });

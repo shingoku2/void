@@ -128,7 +128,48 @@ Here's a guide to some of the terminology we're using:
 ### Build process
 If you want to know how our build pipeline works, see our build repo [here](https://github.com/voideditor/void-builder).
 
+### Common Pitfalls
 
+#### Memory Leaks from Event Listeners
+When using `addEventListener` on DOM elements directly (not through `this._register()`), you must manually clean up in `dispose()`. The `_register()` pattern only works with VSCode's `Disposable` objects.
+
+Example from `voidSelectionHelperWidget.ts`:
+```typescript
+// In constructor - track mouse over widget
+this._rootHTML.addEventListener('mouseenter', this._mouseEnterHandler);
+this._rootHTML.addEventListener('mouseleave', this._mouseLeaveHandler);
+
+// In dispose() - must clean up manually
+this._rootHTML.removeEventListener('mouseenter', this._mouseEnterHandler);
+this._rootHTML.removeEventListener('mouseleave', this._mouseLeaveHandler);
+```
+
+#### Tab Listeners in Git Editor
+When tracking tab close events for documents, dispose listeners when tabs close to prevent memory leaks. Use a Map to track active listeners keyed by document path.
+
+```typescript
+// Track listeners by commit message path
+this._tabListeners.set(commitMessagePath, onDidClose);
+
+// In dispose(), clean up all pending listeners
+for (const listener of this._tabListeners.values()) {
+    listener.dispose();
+}
+```
+
+#### Settings Service Error Handling
+The `voidSettingsService` falls back to default settings when decryption or parsing fails. This is intentional - corrupted settings should not prevent Void from starting.
+
+```typescript
+try {
+    const stateStr = await this._encryptionService.decrypt(encryptedState)
+    const state = JSON.parse(stateStr)
+    return state
+} catch (e) {
+    console.error('Void: Failed to read settings, resetting to defaults. Error:', e);
+    return defaultState()
+}
+```
 
 ## VSCode Codebase Guide
 

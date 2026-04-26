@@ -49,7 +49,12 @@
       "mcp__MCP_DOCKER__search_files",
       "Bash(mkdir -p \"C:\\\\Users\\\\User\\\\.claude\\\\agent-memory\\\\dependency-auditor\")",
       "Bash(tsc --version)",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "WebSearch",
+      "mcp__MCP_DOCKER__firecrawl_search",
+      "mcp__MCP_DOCKER__perplexity_ask",
+      "mcp__MCP_DOCKER__tavily_search",
+      "mcp__MCP_DOCKER__tavily_research"
     ]
   }
 }

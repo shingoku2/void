@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import stream from 'stream';
+import through2 from 'through2';
 import fs from 'fs';
 import gulp from 'gulp';
 import path from 'path';
@@ -77,7 +78,7 @@ export function createCompile(src: string, { build, emitError, transpileOnly, pr
 
 		const postcssNesting = require('postcss-nesting');
 
-		const input = es.through();
+		const input = through2({ objectMode: true });
 		const output = input
 			.pipe(util.$if(isUtf8Test, bom())) // this is required to preserve BOM in test files that loose it otherwise
 			.pipe(util.$if(!build && isRuntimeJs, util.appendOwnPathSourceURL()))
@@ -96,7 +97,7 @@ export function createCompile(src: string, { build, emitError, transpileOnly, pr
 			.pipe(tsFilter.restore)
 			.pipe(reporter.end(!!emitError));
 
-		return es.duplex(input, output);
+		return output;
 	}
 	pipeline.tsProjectSrc = () => {
 		return compilation.src({ base: src });
@@ -137,11 +138,11 @@ export function compileTask(src: string, out: string, build: boolean, options: {
 		}
 
 		// mangle: TypeScript to TypeScript
-		let mangleStream = es.through();
+		let mangleStream = through2({ objectMode: true });
 		if (build && !options.disableMangle) {
 			let ts2tsMangler = new Mangler(compile.projectPath, (...data) => fancyLog(ansiColors.blue('[mangler]'), ...data), { mangleExports: true, manglePrivateFields: true });
 			const newContentsByFileName = ts2tsMangler.computeNewFileContents(new Set(['saveState']));
-			mangleStream = es.through(async function write(data: File & { sourceMap?: RawSourceMap }) {
+			mangleStream = through2({ objectMode: true }, async function (data: File & { sourceMap?: RawSourceMap }, _enc, callback) {
 				type TypeScriptExt = typeof ts & { normalizePath(path: string): string };
 				const tsNormalPath = (<TypeScriptExt>ts).normalizePath(data.path);
 				const newContents = (await newContentsByFileName).get(tsNormalPath);
@@ -150,12 +151,14 @@ export function compileTask(src: string, out: string, build: boolean, options: {
 					data.sourceMap = newContents.sourceMap && JSON.parse(newContents.sourceMap);
 				}
 				this.push(data);
-			}, async function end() {
+				callback();
+			}, async function (callback) {
 				// free resources
 				(await newContentsByFileName).clear();
 
 				this.push(null);
 				(<any>ts2tsMangler) = undefined;
+				callback();
 			});
 		}
 
@@ -202,7 +205,7 @@ class MonacoGenerator {
 
 	constructor(isWatch: boolean) {
 		this._isWatch = isWatch;
-		this.stream = es.through();
+		this.stream = through2({ objectMode: true });
 		this._watchedFiles = {};
 		const onWillReadFile = (moduleId: string, filePath: string) => {
 			if (!this._isWatch) {
@@ -293,14 +296,15 @@ function generateApiProposalNames() {
 	const versionPattern = /^\s*\/\/\s*version\s*:\s*(\d+)\s*$/mi;
 	const proposals = new Map<string, { proposal: string; version?: number }>();
 
-	const input = es.through();
+	const input = through2({ objectMode: true });
 	const output = input
 		.pipe(util.filter((f: File) => pattern.test(f.path)))
-		.pipe(es.through((f: File) => {
+		.pipe(through2({ objectMode: true }, (f: File, _enc, callback) => {
 			const name = path.basename(f.path);
 			const match = pattern.exec(name);
 
 			if (!match) {
+				callback();
 				return;
 			}
 
@@ -314,7 +318,8 @@ function generateApiProposalNames() {
 				proposal: `https://raw.githubusercontent.com/microsoft/vscode/main/src/vscode-dts/vscode.proposed.${proposalName}.d.ts`,
 				version: version ? parseInt(version) : undefined
 			});
-		}, function () {
+			callback();
+		}, function (callback) {
 			const names = [...proposals.keys()].sort();
 			const contents = [
 				'/*---------------------------------------------------------------------------------------------',
@@ -335,23 +340,28 @@ function generateApiProposalNames() {
 				'',
 			].join(eol);
 
-			this.emit('data', new File({
+			this.push(new File({
 				path: 'vs/platform/extensions/common/extensionsApiProposals.ts',
 				contents: Buffer.from(contents)
 			}));
-			this.emit('end');
+			callback();
 		}));
 
-	return es.duplex(input, output);
+	return output;
 }
 
 const apiProposalNamesReporter = createReporter('api-proposal-names');
 
-export const compileApiProposalNamesTask = task.define('compile-api-proposal-names', () => {
-	return gulp.src('src/vscode-dts/**')
-		.pipe(generateApiProposalNames())
-		.pipe(gulp.dest('src'))
-		.pipe(apiProposalNamesReporter.end(true));
+export const compileApiProposalNamesTask = task.define('compile-api-proposal-names', async () => {
+	await new Promise<void>((resolve, reject) => {
+		const stream = gulp.src('src/vscode-dts/**')
+			.pipe(generateApiProposalNames())
+			.pipe(apiProposalNamesReporter.end(true))
+			.pipe(gulp.dest('src'));
+
+		stream.on('finish', resolve);
+		stream.on('error', reject);
+	});
 });
 
 export const watchApiProposalNamesTask = task.define('watch-api-proposal-names', () => {

@@ -45,7 +45,8 @@ exports.createCompile = createCompile;
 exports.transpileTask = transpileTask;
 exports.compileTask = compileTask;
 exports.watchTask = watchTask;
-const event_stream_1 = __importDefault(require("event-stream"));
+const stream_1 = __importDefault(require("stream"));
+const through2_1 = __importDefault(require("through2"));
 const fs_1 = __importDefault(require("fs"));
 const gulp_1 = __importDefault(require("gulp"));
 const path_1 = __importDefault(require("path"));
@@ -99,7 +100,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         const isCSS = (f) => f.path.endsWith('.css') && !f.path.includes('fixtures');
         const noDeclarationsFilter = util.filter(data => !(/\.d\.ts$/.test(data.path)));
         const postcssNesting = require('postcss-nesting');
-        const input = event_stream_1.default.through();
+        const input = (0, through2_1.default)();
         const output = input
             .pipe(util.$if(isUtf8Test, bom())) // this is required to preserve BOM in test files that loose it otherwise
             .pipe(util.$if(!build && isRuntimeJs, util.appendOwnPathSourceURL()))
@@ -117,7 +118,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         })))
             .pipe(tsFilter.restore)
             .pipe(reporter.end(!!emitError));
-        return event_stream_1.default.duplex(input, output);
+        return stream_1.default.PassThrough({ objectMode: true });
     }
     pipeline.tsProjectSrc = () => {
         return compilation.src({ base: src });
@@ -148,11 +149,11 @@ function compileTask(src, out, build, options = {}) {
             generator.execute();
         }
         // mangle: TypeScript to TypeScript
-        let mangleStream = event_stream_1.default.through();
+        let mangleStream = (0, through2_1.default)({ objectMode: true });
         if (build && !options.disableMangle) {
             let ts2tsMangler = new index_1.Mangler(compile.projectPath, (...data) => (0, fancy_log_1.default)(ansi_colors_1.default.blue('[mangler]'), ...data), { mangleExports: true, manglePrivateFields: true });
             const newContentsByFileName = ts2tsMangler.computeNewFileContents(new Set(['saveState']));
-            mangleStream = event_stream_1.default.through(async function write(data) {
+            mangleStream = (0, through2_1.default)({ objectMode: true }, async function (data, _enc, callback) {
                 const tsNormalPath = ts.normalizePath(data.path);
                 const newContents = (await newContentsByFileName).get(tsNormalPath);
                 if (newContents !== undefined) {
@@ -160,11 +161,13 @@ function compileTask(src, out, build, options = {}) {
                     data.sourceMap = newContents.sourceMap && JSON.parse(newContents.sourceMap);
                 }
                 this.push(data);
-            }, async function end() {
+                callback();
+            }, async function (callback) {
                 // free resources
                 (await newContentsByFileName).clear();
                 this.push(null);
                 ts2tsMangler = undefined;
+                callback();
             });
         }
         return srcPipe
@@ -200,7 +203,7 @@ class MonacoGenerator {
     _declarationResolver;
     constructor(isWatch) {
         this._isWatch = isWatch;
-        this.stream = event_stream_1.default.through();
+        this.stream = (0, through2_1.default)({ objectMode: true });
         this._watchedFiles = {};
         const onWillReadFile = (moduleId, filePath) => {
             if (!this._isWatch) {
@@ -281,13 +284,14 @@ function generateApiProposalNames() {
     const pattern = /vscode\.proposed\.([a-zA-Z\d]+)\.d\.ts$/;
     const versionPattern = /^\s*\/\/\s*version\s*:\s*(\d+)\s*$/mi;
     const proposals = new Map();
-    const input = event_stream_1.default.through();
+    const input = (0, through2_1.default)({ objectMode: true });
     const output = input
         .pipe(util.filter((f) => pattern.test(f.path)))
-        .pipe(event_stream_1.default.through((f) => {
+        .pipe((0, through2_1.default)({ objectMode: true }, (f, _enc, callback) => {
         const name = path_1.default.basename(f.path);
         const match = pattern.exec(name);
         if (!match) {
+            callback();
             return;
         }
         const proposalName = match[1];
@@ -298,7 +302,8 @@ function generateApiProposalNames() {
             proposal: `https://raw.githubusercontent.com/microsoft/vscode/main/src/vscode-dts/vscode.proposed.${proposalName}.d.ts`,
             version: version ? parseInt(version) : undefined
         });
-    }, function () {
+        callback();
+    }, function (callback) {
         const names = [...proposals.keys()].sort();
         const contents = [
             '/*---------------------------------------------------------------------------------------------',
@@ -318,20 +323,24 @@ function generateApiProposalNames() {
             'export type ApiProposalName = keyof typeof _allApiProposals;',
             '',
         ].join(eol);
-        this.emit('data', new vinyl_1.default({
+        this.push(new vinyl_1.default({
             path: 'vs/platform/extensions/common/extensionsApiProposals.ts',
             contents: Buffer.from(contents)
         }));
-        this.emit('end');
+        callback();
     }));
-    return event_stream_1.default.duplex(input, output);
+    return output;
 }
 const apiProposalNamesReporter = (0, reporter_1.createReporter)('api-proposal-names');
-exports.compileApiProposalNamesTask = task.define('compile-api-proposal-names', () => {
-    return gulp_1.default.src('src/vscode-dts/**')
-        .pipe(generateApiProposalNames())
-        .pipe(gulp_1.default.dest('src'))
-        .pipe(apiProposalNamesReporter.end(true));
+exports.compileApiProposalNamesTask = task.define('compile-api-proposal-names', async () => {
+    await new Promise((resolve, reject) => {
+        const stream = gulp_1.default.src('src/vscode-dts/**')
+            .pipe(generateApiProposalNames())
+            .pipe(apiProposalNamesReporter.end(true))
+            .pipe(gulp_1.default.dest('src'));
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+    });
 });
 exports.watchApiProposalNamesTask = task.define('watch-api-proposal-names', () => {
     const task = () => gulp_1.default.src('src/vscode-dts/**')
@@ -341,4 +350,3 @@ exports.watchApiProposalNamesTask = task.define('watch-api-proposal-names', () =
         .pipe(util.debounce(task))
         .pipe(gulp_1.default.dest('src'));
 });
-//# sourceMappingURL=compilation.js.map

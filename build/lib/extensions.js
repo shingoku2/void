@@ -51,7 +51,7 @@ exports.scanBuiltinExtensions = scanBuiltinExtensions;
 exports.translatePackageJSON = translatePackageJSON;
 exports.webpackExtensions = webpackExtensions;
 exports.buildExtensionMedia = buildExtensionMedia;
-const event_stream_1 = __importDefault(require("event-stream"));
+const stream_1 = require("stream");
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = __importDefault(require("child_process"));
 const glob_1 = __importDefault(require("glob"));
@@ -61,7 +61,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const stats_1 = require("./stats");
 const util2 = __importStar(require("./util"));
-const vzip = require('gulp-vinyl-zip');
+const yauzl = __importStar(require("yauzl"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
 const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
@@ -72,22 +72,98 @@ const dependencies_1 = require("./dependencies");
 const builtInExtensions_1 = require("./builtInExtensions");
 const getVersion_1 = require("./getVersion");
 const fetch_1 = require("./fetch");
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const commit = (0, getVersion_1.getVersion)(root);
 const sourceMappingURLBase = `https://main.vscode-cdn.net/sourcemaps/${commit}`;
+/**
+ * Extract VSIX/ZIP contents using yauzl and return as a stream of vinyl files.
+ * This replaces gulp-vinyl-zip (vzip.src()) with direct yauzl usage.
+ */
+function extractVsix() {
+    const transform = new stream_1.Transform({
+        objectMode: true,
+        transform(file, _encoding, callback) {
+            if (!file.isBuffer()) {
+                callback(new Error('extractVsix requires a buffer file'));
+                return;
+            }
+            yauzl.fromBuffer(file.contents, { lazyEntries: true, autoClose: true }, (err, zipfile) => {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                if (!zipfile) {
+                    callback(new Error('yauzl returned null zipfile'));
+                    return;
+                }
+                const entries = [];
+                zipfile.on('entry', (entry) => {
+                    entries.push(entry);
+                    zipfile.readEntry();
+                });
+                zipfile.on('end', () => {
+                    // Process entries and emit vinyl files via transform.push()
+                    let pending = entries.length;
+                    if (pending === 0) {
+                        callback(null, file);
+                        return;
+                    }
+                    for (const entry of entries) {
+                        const entryPath = entry.fileName;
+                        // Skip directories
+                        if (entryPath.endsWith('/')) {
+                            pending--;
+                            if (pending === 0) {
+                                callback(null, file);
+                            }
+                            continue;
+                        }
+                        zipfile.openReadStream(entry, (err, readStream) => {
+                            if (err) {
+                                callback(err);
+                                return;
+                            }
+                            const chunks = [];
+                            readStream.on('data', (chunk) => chunks.push(chunk));
+                            readStream.on('end', () => {
+                                const contents = Buffer.concat(chunks);
+                                const vinylFile = new vinyl_1.default({
+                                    base: file.base,
+                                    path: path_1.default.join(file.base, entryPath),
+                                    contents,
+                                });
+                                transform.push(vinylFile);
+                                pending--;
+                                if (pending === 0) {
+                                    callback(null, file);
+                                }
+                            });
+                            readStream.on('error', callback);
+                        });
+                    }
+                });
+                zipfile.on('error', callback);
+                zipfile.readEntry();
+            });
+        }
+    });
+    return transform;
+}
 function minifyExtensionResources(input) {
     const jsonFilter = (0, gulp_filter_1.default)(['**/*.json', '**/*.code-snippets'], { restore: true });
     return input
         .pipe(jsonFilter)
         .pipe((0, gulp_buffer_1.default)())
-        .pipe(event_stream_1.default.mapSync((f) => {
+        .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const errors = [];
         const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
         if (errors.length === 0) {
             // file parsed OK => just stringify to drop whitespace and comments
             f.contents = Buffer.from(JSON.stringify(value));
         }
-        return f;
+        callback(null, f);
     }))
         .pipe(jsonFilter.restore);
 }
@@ -96,10 +172,10 @@ function updateExtensionPackageJSON(input, update) {
     return input
         .pipe(packageJsonFilter)
         .pipe((0, gulp_buffer_1.default)())
-        .pipe(event_stream_1.default.mapSync((f) => {
+        .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const data = JSON.parse(f.contents.toString('utf8'));
         f.contents = Buffer.from(JSON.stringify(update(data)));
-        return f;
+        callback(null, f);
     }))
         .pipe(packageJsonFilter.restore);
 }
@@ -126,7 +202,7 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
     const vsce = require('@vscode/vsce');
     const webpack = require('webpack');
     const webpackGulp = require('webpack-stream');
-    const result = event_stream_1.default.through();
+    const result = new stream_1.PassThrough({ objectMode: true });
     const packagedDependencies = [];
     const packageJsonConfig = require(path_1.default.join(extensionPath, 'package.json'));
     if (packageJsonConfig.dependencies) {
@@ -189,12 +265,12 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
                 }
                 const relativeOutputPath = path_1.default.relative(extensionPath, webpackConfig.output.path);
                 return webpackGulp(webpackConfig, webpack, webpackDone)
-                    .pipe(event_stream_1.default.through(function (data) {
+                    .pipe(through2_1.default.obj(function (data, _encoding, callback) {
                     data.stat = data.stat || {};
                     data.base = extensionPath;
-                    this.emit('data', data);
+                    callback(null, data);
                 }))
-                    .pipe(event_stream_1.default.through(function (data) {
+                    .pipe(through2_1.default.obj(function (data, _encoding, callback) {
                     // source map handling:
                     // * rewrite sourceMappingURL
                     // * save to disk so that upload-task picks this up
@@ -204,17 +280,25 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
                             return `\n//# sourceMappingURL=${sourceMappingURLBase}/extensions/${path_1.default.basename(extensionPath)}/${relativeOutputPath}/${g1}`;
                         }), 'utf8');
                     }
-                    this.emit('data', data);
+                    callback(null, data);
                 }));
             });
         });
-        event_stream_1.default.merge(...webpackStreams, event_stream_1.default.readArray(files))
+        const filesStream = new stream_1.PassThrough({ objectMode: true });
+        for (const file of files) {
+            filesStream.write(file);
+        }
+        filesStream.end();
+        const merged = (0, merge_stream_1.default)(...webpackStreams, filesStream);
+        merged.on('error', err => result.emit('error', err));
+        merged.on('end', () => result.end());
+        merged
             // .pipe(es.through(function (data) {
             // 	// debug
             // 	console.log('out', data.path, data.contents.length);
             // 	this.emit('data', data);
             // }))
-            .pipe(result);
+            .pipe(result, { end: false });
     }).catch(err => {
         console.error(extensionPath);
         console.error(packagedDependencies);
@@ -224,7 +308,7 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
 }
 function fromLocalNormal(extensionPath) {
     const vsce = require('@vscode/vsce');
-    const result = event_stream_1.default.through();
+    const result = new stream_1.PassThrough({ objectMode: true });
     vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.Npm })
         .then(fileNames => {
         const files = fileNames
@@ -235,7 +319,13 @@ function fromLocalNormal(extensionPath) {
             base: extensionPath,
             contents: fs_1.default.createReadStream(filePath)
         }));
-        event_stream_1.default.readArray(files).pipe(result);
+            const filesStream = new stream_1.PassThrough({ objectMode: true });
+        for (const file of files) {
+            filesStream.write(file);
+        }
+        filesStream.end();
+            filesStream.on('end', () => result.end());
+            filesStream.pipe(result, { end: false });
     })
         .catch(err => result.emit('error', err));
     return result.pipe((0, stats_1.createStatsStream)(path_1.default.basename(extensionPath)));
@@ -259,7 +349,7 @@ function fromMarketplace(serviceUrl, { name: extensionName, version, sha256, met
         },
         checksumSha256: sha256
     })
-        .pipe(vzip.src())
+        .pipe(extractVsix())
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
@@ -273,16 +363,18 @@ function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) 
     const packageJsonFilter = (0, gulp_filter_1.default)('package.json', { restore: true });
     return gulp_1.default.src(vsixPath)
         .pipe((0, gulp_buffer_1.default)())
-        .pipe(event_stream_1.default.mapSync((f) => {
+        .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const hash = crypto_1.default.createHash('sha256');
         hash.update(f.contents);
         const checksum = hash.digest('hex');
         if (checksum !== sha256) {
-            throw new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`);
+            callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
         }
-        return f;
+        else {
+            callback(null, f);
+        }
     }))
-        .pipe(vzip.src())
+        .pipe(extractVsix())
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
@@ -300,7 +392,7 @@ function fromGithub({ name, version, repo, sha256, metadata }) {
         checksumSha256: sha256
     })
         .pipe((0, gulp_buffer_1.default)())
-        .pipe(vzip.src())
+        .pipe(extractVsix())
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
@@ -387,10 +479,7 @@ function packageNativeLocalExtensionsStream(forWeb, disableMangle) {
  * @returns a stream
  */
 function packageAllLocalExtensionsStream(forWeb, disableMangle) {
-    return event_stream_1.default.merge([
-        packageNonNativeLocalExtensionsStream(forWeb, disableMangle),
-        packageNativeLocalExtensionsStream(forWeb, disableMangle)
-    ]);
+    return (0, merge_stream_1.default)(packageNonNativeLocalExtensionsStream(forWeb, disableMangle), packageNativeLocalExtensionsStream(forWeb, disableMangle));
 }
 /**
  * @param forWeb build the extensions that have web targets
@@ -398,6 +487,33 @@ function packageAllLocalExtensionsStream(forWeb, disableMangle) {
  * @param native build the extensions that are marked as having native dependencies
  */
 function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
+    const combineStreams = (streams) => {
+        const output = new stream_1.PassThrough({ objectMode: true });
+        let pending = streams.length;
+        if (pending === 0) {
+            output.end();
+            return output;
+        }
+        for (const stream of streams) {
+            stream.on('error', err => output.emit('error', err));
+            let done = false;
+            const onDone = () => {
+                if (done) {
+                    return;
+                }
+                done = true;
+                pending--;
+                if (pending === 0) {
+                    output.end();
+                }
+            };
+            stream.on('end', onDone);
+            stream.on('close', onDone);
+            stream.on('finish', onDone);
+            stream.pipe(output, { end: false });
+        }
+        return output;
+    };
     const nativeExtensionsSet = new Set(nativeExtensions);
     const localExtensionsDescriptions = (glob_1.default.sync('extensions/*/package.json')
         .map(manifestPath => {
@@ -410,10 +526,11 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         .filter(({ name }) => excludedExtensions.indexOf(name) === -1)
         .filter(({ name }) => builtInExtensions.every(b => b.name !== name))
         .filter(({ manifestPath }) => (forWeb ? isWebExtension(require(manifestPath)) : true)));
-    const localExtensionsStream = minifyExtensionResources(event_stream_1.default.merge(...localExtensionsDescriptions.map(extension => {
+    const localExtensionStreams = localExtensionsDescriptions.map(extension => {
         return fromLocal(extension.path, forWeb, disableMangle)
             .pipe((0, gulp_rename_1.default)(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
-    })));
+    });
+    const localExtensionsStream = minifyExtensionResources(combineStreams(localExtensionStreams));
     let result;
     if (forWeb) {
         result = localExtensionsStream;
@@ -422,19 +539,28 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         // also include shared production node modules
         const productionDependencies = (0, dependencies_1.getProductionDependencies)('extensions/');
         const dependenciesSrc = productionDependencies.map(d => path_1.default.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
-        result = event_stream_1.default.merge(localExtensionsStream, gulp_1.default.src(dependenciesSrc, { base: '.' })
-            .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', '.moduleignore')))
-            .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', `.moduleignore.${process.platform}`))));
+        if (dependenciesSrc.length === 0) {
+            result = localExtensionsStream;
+        }
+        else {
+            result = combineStreams([localExtensionsStream, gulp_1.default.src(dependenciesSrc, { base: '.' })
+                .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', '.moduleignore')))
+                .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', `.moduleignore.${process.platform}`)))]);
+        }
     }
-    return (result
-        .pipe(util2.setExecutableBit(['**/*.sh'])));
+    return result;
 }
 function packageMarketplaceExtensionsStream(forWeb) {
     const marketplaceExtensionsDescriptions = [
         ...builtInExtensions.filter(({ name }) => (forWeb ? !marketplaceWebExtensionsExclude.has(name) : true)),
         ...(forWeb ? webBuiltInExtensions : [])
     ];
-    const marketplaceExtensionsStream = minifyExtensionResources(event_stream_1.default.merge(...marketplaceExtensionsDescriptions
+    if (marketplaceExtensionsDescriptions.length === 0) {
+        const empty = new stream_1.PassThrough({ objectMode: true });
+        empty.end();
+        return empty;
+    }
+    const marketplaceExtensionsStream = minifyExtensionResources((0, merge_stream_1.default)(...marketplaceExtensionsDescriptions
         .map(extension => {
         const src = (0, builtInExtensions_1.getExtensionStream)(extension).pipe((0, gulp_rename_1.default)(p => p.dirname = `extensions/${p.dirname}`));
         return updateExtensionPackageJSON(src, (data) => {
@@ -444,8 +570,7 @@ function packageMarketplaceExtensionsStream(forWeb) {
             return data;
         });
     })));
-    return (marketplaceExtensionsStream
-        .pipe(util2.setExecutableBit(['**/*.sh'])));
+    return marketplaceExtensionsStream;
 }
 function scanBuiltinExtensions(extensionsRoot, exclude = []) {
     const scannedExtensions = [];

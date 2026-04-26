@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import through2 from 'through2';
+import mergeStream from 'merge-stream';
+import { Readable } from 'stream';
 import Vinyl from 'vinyl';
 import vfs from 'vinyl-fs';
 import filter from 'gulp-filter';
@@ -67,7 +69,7 @@ const MimeTypesToCompress = new Set([
 	'text/x-java-source'
 ]);
 
-function wait(stream: es.ThroughStream): Promise<void> {
+function wait(stream: NodeJS.ReadWriteStream): Promise<void> {
 	return new Promise<void>((c, e) => {
 		stream.on('end', () => c());
 		stream.on('error', (err: any) => e(err));
@@ -99,11 +101,11 @@ async function main(): Promise<void> {
 		.pipe(filter(f => !MimeTypesToCompress.has(mime.lookup(f.path))))
 		.pipe(azure.upload(options(false)));
 
-	const out = es.merge(compressed, uncompressed)
-		.pipe(es.through(function (f) {
+	const out = mergeStream(compressed, uncompressed)
+		.pipe(through2.obj(function (f, _, cb) {
 			console.log('Uploaded:', f.relative);
 			files.push(f.relative);
-			this.emit('data', f);
+			cb(undefined, f);
 		}));
 
 	console.log(`Uploading files to CDN...`); // debug
@@ -115,7 +117,7 @@ async function main(): Promise<void> {
 		stat: { mode: 0o666 } as any
 	});
 
-	const filesOut = es.readArray([listing])
+	const filesOut = Readable.from([listing])
 		.pipe(gzip({ append: false }))
 		.pipe(azure.upload(options(true)));
 

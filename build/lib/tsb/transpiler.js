@@ -84,22 +84,16 @@ class TranspileWorker {
             }
             const [resolve, reject, files, options, t1] = this._pending;
             const outFiles = [];
-            const diag = [];
+            const diagnostics = [];
             for (let i = 0; i < res.jsSrcs.length; i++) {
                 // inputs and outputs are aligned across the arrays
                 const file = files[i];
                 const jsSrc = res.jsSrcs[i];
-                const diag = res.diagnostics[i];
-                if (diag.length > 0) {
-                    diag.push(...diag);
+                const fileDiagnostics = res.diagnostics[i];
+                if (fileDiagnostics.length > 0) {
+                    diagnostics.push(...fileDiagnostics);
                     continue;
                 }
-                let SuffixTypes;
-                (function (SuffixTypes) {
-                    SuffixTypes[SuffixTypes["Dts"] = 5] = "Dts";
-                    SuffixTypes[SuffixTypes["Ts"] = 3] = "Ts";
-                    SuffixTypes[SuffixTypes["Unknown"] = 0] = "Unknown";
-                })(SuffixTypes || (SuffixTypes = {}));
                 const suffixLen = file.path.endsWith('.d.ts') ? 5 /* SuffixTypes.Dts */
                     : file.path.endsWith('.ts') ? 3 /* SuffixTypes.Ts */
                         : 0 /* SuffixTypes.Unknown */;
@@ -118,8 +112,8 @@ class TranspileWorker {
             }
             this._pending = undefined;
             this._durations.push(Date.now() - t1);
-            if (diag.length > 0) {
-                reject(diag);
+            if (diagnostics.length > 0) {
+                reject(diagnostics);
             }
             else {
                 resolve(outFiles);
@@ -303,4 +297,3 @@ function _isDefaultEmpty(src) {
         .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1')
         .trim().length === 0;
 }
-//# sourceMappingURL=transpiler.js.map

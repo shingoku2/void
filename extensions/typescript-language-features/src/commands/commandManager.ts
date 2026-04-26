@@ -31,9 +31,9 @@ export class CommandManager {
 		}
 
 		return new vscode.Disposable(() => {
-			entry.refCount -= 1;
-			if (entry.refCount <= 0) {
-				entry.registration.dispose();
+			entry!.refCount -= 1;
+			if (entry!.refCount <= 0) {
+				entry!.registration.dispose();
 				this.commands.delete(command.id);
 			}
 		});

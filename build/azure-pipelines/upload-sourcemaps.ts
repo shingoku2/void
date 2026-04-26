@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import path from 'path';
-import es from 'event-stream';
+import through2 from 'through2';
+import mergeStream from 'merge-stream';
 import Vinyl from 'vinyl';
 import vfs from 'vinyl-fs';
 import * as util from '../lib/util';
@@ -21,9 +22,9 @@ const [, , base, maps] = process.argv;
 
 function src(base: string, maps = `${base}/**/*.map`) {
 	return vfs.src(maps, { base })
-		.pipe(es.mapSync((f: Vinyl) => {
+		.pipe(through2.obj((f: Vinyl, _, cb) => {
 			f.path = `${f.base}/core/${f.relative}`;
-			return f;
+			cb(undefined, f);
 		}));
 }
 
@@ -52,10 +53,10 @@ function main(): Promise<void> {
 	}
 
 	return new Promise((c, e) => {
-		es.merge(...sources)
-			.pipe(es.through(function (data: Vinyl) {
+		mergeStream(...sources)
+			.pipe(through2.obj(function (data: Vinyl, _, cb) {
 				console.log('Uploading Sourcemap', data.relative); // debug
-				this.emit('data', data);
+				cb(undefined, data);
 			}))
 			.pipe(azure.upload({
 				account: process.env.AZURE_STORAGE_ACCOUNT,

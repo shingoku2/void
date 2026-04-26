@@ -9,7 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAsar = createAsar;
 const path_1 = __importDefault(require("path"));
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
 const pickle = require('chromium-pickle-js');
 const Filesystem = require('asar/lib/filesystem');
 const vinyl_1 = __importDefault(require("vinyl"));
@@ -78,24 +78,24 @@ function createAsar(folderPath, unpackGlobs, skipGlobs, duplicateGlobs, destFile
         // Create a closure capturing `onFileInserted`.
         filesystem.insertFile(relativePath, shouldUnpack, { stat: stat }, {}).then(() => onFileInserted(), () => onFileInserted());
     };
-    return event_stream_1.default.through(function (file) {
+    return through2_1.default.obj(function (file, _enc, callback) {
         if (file.stat.isDirectory()) {
-            return;
+            return callback();
         }
         if (!file.stat.isFile()) {
-            throw new Error(`unknown item in stream!`);
+            return callback(new Error(`unknown item in stream!`));
         }
         if (shouldSkipFile(file)) {
-            this.queue(new vinyl_1.default({
+            this.push(new vinyl_1.default({
                 base: '.',
                 path: file.path,
                 stat: file.stat,
                 contents: file.contents
             }));
-            return;
+            return callback();
         }
         if (shouldDuplicateFile(file)) {
-            this.queue(new vinyl_1.default({
+            this.push(new vinyl_1.default({
                 base: '.',
                 path: file.path,
                 stat: file.stat,
@@ -107,7 +107,7 @@ function createAsar(folderPath, unpackGlobs, skipGlobs, duplicateGlobs, destFile
         if (shouldUnpack) {
             // The file goes outside of xx.asar, in a folder xx.asar.unpacked
             const relative = path_1.default.relative(folderPath, file.path);
-            this.queue(new vinyl_1.default({
+            this.push(new vinyl_1.default({
                 base: '.',
                 path: path_1.default.join(destFilename + '.unpacked', relative),
                 stat: file.stat,
@@ -118,7 +118,8 @@ function createAsar(folderPath, unpackGlobs, skipGlobs, duplicateGlobs, destFile
             // The file goes inside of xx.asar
             out.push(file.contents);
         }
-    }, function () {
+        callback();
+    }, function (callback) {
         const finish = () => {
             {
                 const headerPickle = pickle.createEmpty();
@@ -132,12 +133,13 @@ function createAsar(folderPath, unpackGlobs, skipGlobs, duplicateGlobs, destFile
             }
             const contents = Buffer.concat(out);
             out.length = 0;
-            this.queue(new vinyl_1.default({
+            this.push(new vinyl_1.default({
                 base: '.',
                 path: destFilename,
                 contents: contents
             }));
-            this.queue(null);
+            this.push(null);
+            callback();
         };
         // Call finish() only when all file inserts have finished...
         if (pendingInserts === 0) {

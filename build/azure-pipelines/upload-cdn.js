@@ -7,7 +7,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
+const stream_1 = require("stream");
 const vinyl_1 = __importDefault(require("vinyl"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
@@ -94,11 +96,11 @@ async function main() {
     const uncompressed = all
         .pipe((0, gulp_filter_1.default)(f => !MimeTypesToCompress.has(mime_1.default.lookup(f.path))))
         .pipe(azure.upload(options(false)));
-    const out = event_stream_1.default.merge(compressed, uncompressed)
-        .pipe(event_stream_1.default.through(function (f) {
+    const out = (0, merge_stream_1.default)(compressed, uncompressed)
+        .pipe(through2_1.default.obj(function (f, _, cb) {
         console.log('Uploaded:', f.relative);
         files.push(f.relative);
-        this.emit('data', f);
+        cb(undefined, f);
     }));
     console.log(`Uploading files to CDN...`); // debug
     await wait(out);
@@ -107,7 +109,7 @@ async function main() {
         contents: Buffer.from(files.join('\n')),
         stat: { mode: 0o666 }
     });
-    const filesOut = event_stream_1.default.readArray([listing])
+    const filesOut = stream_1.Readable.from([listing])
         .pipe((0, gulp_gzip_1.default)({ append: false }))
         .pipe(azure.upload(options(true)));
     console.log(`Uploading: files.txt (${files.length} files)`); // debug

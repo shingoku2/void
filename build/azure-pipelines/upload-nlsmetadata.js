@@ -7,7 +7,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
+const merge_stream_1 = __importDefault(require("merge-stream"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const gulp_merge_json_1 = __importDefault(require("gulp-merge-json"));
 const gulp_gzip_1 = __importDefault(require("gulp-gzip"));
@@ -19,11 +20,11 @@ const commit = process.env['BUILD_SOURCEVERSION'];
 const credential = new identity_1.ClientAssertionCredential(process.env['AZURE_TENANT_ID'], process.env['AZURE_CLIENT_ID'], () => Promise.resolve(process.env['AZURE_ID_TOKEN']));
 function main() {
     return new Promise((c, e) => {
-        const combinedMetadataJson = event_stream_1.default.merge(
+        const combinedMetadataJson = (0, merge_stream_1.default)(
         // vscode: we are not using `out-build/nls.metadata.json` here because
         // it includes metadata for translators for `keys`. but for our purpose
         // we want only the `keys` and `messages` as `string`.
-        event_stream_1.default.merge(vinyl_fs_1.default.src('out-build/nls.keys.json', { base: 'out-build' }), vinyl_fs_1.default.src('out-build/nls.messages.json', { base: 'out-build' }))
+        (0, merge_stream_1.default)(vinyl_fs_1.default.src('out-build/nls.keys.json', { base: 'out-build' }), vinyl_fs_1.default.src('out-build/nls.messages.json', { base: 'out-build' }))
             .pipe((0, gulp_merge_json_1.default)({
             fileName: 'vscode.json',
             jsonSpace: '',
@@ -97,14 +98,14 @@ function main() {
             },
         }));
         const nlsMessagesJs = vinyl_fs_1.default.src('out-build/nls.messages.js', { base: 'out-build' });
-        event_stream_1.default.merge(combinedMetadataJson, nlsMessagesJs)
+        (0, merge_stream_1.default)(combinedMetadataJson, nlsMessagesJs)
             .pipe((0, gulp_gzip_1.default)({ append: false }))
             .pipe(vinyl_fs_1.default.dest('./nlsMetadata'))
-            .pipe(event_stream_1.default.through(function (data) {
+            .pipe(through2_1.default.obj(function (data, _, cb) {
             console.log(`Uploading ${data.path}`);
             // trigger artifact upload
             console.log(`##vso[artifact.upload containerfolder=nlsmetadata;artifactname=${data.basename}]${data.path}`);
-            this.emit('data', data);
+            cb(undefined, data);
         }))
             .pipe(azure.upload({
             account: process.env.AZURE_STORAGE_ACCOUNT,

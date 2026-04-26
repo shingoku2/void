@@ -617,7 +617,7 @@ async function deriveStackLocations(
 ) {
 	locationRe.lastIndex = 0;
 
-	const locationsRaw = [...new StackTraceParser(stack)].filter(t => t instanceof StackTraceLocation);
+	const locationsRaw = [...new StackTraceParser(stack)].filter((t): t is StackTraceLocation => t instanceof StackTraceLocation);
 	const locationsMapped = await Promise.all(locationsRaw.map(async location => {
 		const mapped = location.path.startsWith('file:') ? await store.getSourceLocation(location.path, location.lineBase1 - 1, location.columnBase1 - 1) : undefined;
 		const stack = new vscode.TestMessageStackFrame(location.label || '<anonymous>', mapped?.uri, mapped?.range.start || new vscode.Position(location.lineBase1 - 1, location.columnBase1 - 1));

@@ -8,11 +8,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createReporter = createReporter;
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const stream_1 = require("stream");
 class ErrorLog {
     id;
     constructor(id) {
@@ -82,24 +83,47 @@ function createReporter(id) {
     const result = (err) => errors.push(err);
     result.hasErrors = () => errors.length > 0;
     result.end = (emitError) => {
-        errors.length = 0;
         errorLog.onStart();
-        return event_stream_1.default.through(undefined, function () {
-            errorLog.onEnd();
-            if (emitError && errors.length > 0) {
-                if (!errors.__logged__) {
-                    errorLog.log();
+        let flushed = false;
+        // Use a proper Transform stream that explicitly controls its lifecycle
+        const transform = new stream_1.Transform({
+            objectMode: true,
+            transform(chunk, encoding, callback) {
+                this.push(chunk);
+                callback();
+            },
+            flush(callback) {
+                if (flushed) {
+                    callback();
+                    return;
                 }
-                errors.__logged__ = true;
-                const err = new Error(`Found ${errors.length} errors`);
-                err.__reporter__ = true;
-                this.emit('error', err);
-            }
-            else {
-                this.emit('end');
+                flushed = true;
+                errorLog.onEnd();
+                if (emitError && errors.length > 0) {
+                    if (!errors.__logged__) {
+                        errorLog.log();
+                    }
+                    errors.__logged__ = true;
+                    const err = new Error(`Found ${errors.length} errors`);
+                    err.__reporter__ = true;
+                    // Emit error after a tick to ensure proper async signaling
+                    process.nextTick(() => {
+                        transform.emit('error', err);
+                    });
+                }
+                callback();
             }
         });
+        // Create a wrapper that forces objectMode and passes through all data
+        const wrapped = through2_1.default.obj(function (chunk, encoding, callback) {
+            this.push(chunk);
+            callback();
+        }, function (callback) {
+            callback();
+        });
+        // Pipe transform to wrapped - this should maintain objectMode
+        transform.pipe(wrapped);
+        return wrapped;
     };
     return result;
 }
-//# sourceMappingURL=reporter.js.map

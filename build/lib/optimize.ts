@@ -3,15 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
+import * as stream from 'stream';
+import through2 from 'through2';
+import mergeStream from 'merge-stream';
 import gulp from 'gulp';
 import filter from 'gulp-filter';
 import path from 'path';
 import fs from 'fs';
-import pump from 'pump';
+import { pipeline } from 'stream/promises';
 import VinylFile from 'vinyl';
 import * as bundle from './bundle';
-import { gulpPostcss } from './postcss';
 import esbuild from 'esbuild';
 import sourcemaps from 'gulp-sourcemaps';
 import fancyLog from 'fancy-log';
@@ -51,8 +52,8 @@ const DEFAULT_FILE_HEADER = [
 ].join('\n');
 
 function bundleESMTask(opts: IBundleESMTaskOpts): NodeJS.ReadWriteStream {
-	const resourcesStream = es.through(); // this stream will contain the resources
-	const bundlesStream = es.through(); // this stream will contain the bundled files
+	const resourcesStream = through2.obj(); // this stream will contain the resources
+	const bundlesStream = through2.obj(); // this stream will contain the bundled files
 
 	const entryPoints = opts.entryPoints.map(entryPoint => {
 		if (typeof entryPoint === 'string') {
@@ -173,13 +174,13 @@ function bundleESMTask(opts: IBundleESMTaskOpts): NodeJS.ReadWriteStream {
 	bundleAsync().then((output) => {
 
 		// bundle output (JS, CSS, SVG...)
-		es.readArray(output.files).pipe(bundlesStream);
+		stream.Readable.from(output.files).pipe(bundlesStream);
 
 		// forward all resources
 		gulp.src(opts.resources ?? [], { base: `${opts.src}`, allowEmpty: true }).pipe(resourcesStream);
 	});
 
-	const result = es.merge(
+	const result = mergeStream(
 		bundlesStream,
 		resourcesStream
 	);
@@ -212,58 +213,106 @@ export function bundleTask(opts: IBundleESMTaskOpts): () => NodeJS.ReadWriteStre
 export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) => void {
 	const sourceMappingURL = sourceMapBaseUrl ? ((f: any) => `${sourceMapBaseUrl}/${f.relative}.map`) : undefined;
 
-	return cb => {
-		const cssnano = require('cssnano') as typeof import('cssnano');
+	return async cb => {
 		const svgmin = require('gulp-svgmin') as typeof import('gulp-svgmin');
 
 		const jsFilter = filter('**/*.js', { restore: true });
 		const cssFilter = filter('**/*.css', { restore: true });
 		const svgFilter = filter('**/*.svg', { restore: true });
 
-		pump(
-			gulp.src([src + '/**', '!' + src + '/**/*.map']),
-			jsFilter,
-			sourcemaps.init({ loadMaps: true }),
-			es.map((f: any, cb) => {
-				esbuild.build({
-					entryPoints: [f.path],
+		const srcStream = gulp.src([src + '/**', '!' + src + '/**/*.map']);
+		const jsStream = srcStream
+			.pipe(jsFilter)
+			.pipe(sourcemaps.init({ loadMaps: true }));
+
+		// Process JS files with esbuild
+		const processedJsFiles: VinylFile[] = [];
+		for await (const f of jsStream) {
+			const jsFile = f as VinylFile;
+			if (!jsFile.path.endsWith('.js')) {
+				processedJsFiles.push(jsFile);
+				continue;
+			}
+			try {
+				const res = await esbuild.build({
+					entryPoints: [jsFile.path],
 					minify: true,
 					sourcemap: 'external',
 					outdir: '.',
-					packages: 'external', // "external all the things", see https://esbuild.github.io/api/#packages
-					platform: 'neutral', // makes esm
+					packages: 'external',
+					platform: 'neutral',
 					target: ['es2022'],
 					write: false
-				}).then(res => {
-					const jsFile = res.outputFiles.find(f => /\.js$/.test(f.path))!;
-					const sourceMapFile = res.outputFiles.find(f => /\.js\.map$/.test(f.path))!;
-
-					const contents = Buffer.from(jsFile.contents);
+				});
+				const jsOut = res.outputFiles.find(f => /\.js$/.test(f.path));
+				const mapOut = res.outputFiles.find(f => /\.js\.map$/.test(f.path));
+				if (jsOut) {
+					const contents = Buffer.from(jsOut.contents);
 					const unicodeMatch = contents.toString().match(/[^\x00-\xFF]+/g);
 					if (unicodeMatch) {
-						cb(new Error(`Found non-ascii character ${unicodeMatch[0]} in the minified output of ${f.path}. Non-ASCII characters in the output can cause performance problems when loading. Please review if you have introduced a regular expression that esbuild is not automatically converting and convert it to using unicode escape sequences.`));
-					} else {
-						f.contents = contents;
-						f.sourceMap = JSON.parse(sourceMapFile.text);
-
-						cb(undefined, f);
+						cb(new Error(`Found non-ascii character ${unicodeMatch[0]} in minified output of ${jsFile.path}`));
+						return;
 					}
-				}, cb);
-			}),
-			jsFilter.restore,
-			cssFilter,
-			gulpPostcss([cssnano({ preset: 'default' })]),
-			cssFilter.restore,
-			svgFilter,
-			svgmin(),
-			svgFilter.restore,
-			sourcemaps.write('./', {
+					jsFile.contents = contents;
+					jsFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
+				}
+				processedJsFiles.push(jsFile);
+			} catch (err) {
+				cb(err);
+				return;
+			}
+		}
+
+		// Process CSS files with esbuild (replaces cssnano)
+		const cssStream = gulp.src([src + '/**/*.css', '!' + src + '/**/*.map']);
+		const processedCssFiles: VinylFile[] = [];
+		for await (const f of cssStream) {
+			const cssFile = f as VinylFile;
+			try {
+				const res = await esbuild.build({
+					entryPoints: [cssFile.path],
+					minify: true,
+					sourcemap: 'external',
+					outdir: '.',
+					loader: { '.css': 'css' },
+					write: false
+				});
+				const cssOut = res.outputFiles.find(f => /\.css$/.test(f.path));
+				const mapOut = res.outputFiles.find(f => /\.css\.map$/.test(f.path));
+				if (cssOut) {
+					cssFile.contents = Buffer.from(cssOut.contents);
+					cssFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
+				}
+				processedCssFiles.push(cssFile);
+			} catch (err) {
+				cb(err);
+				return;
+			}
+		}
+
+		// Process SVG files
+		const svgStream = gulp.src([src + '/**/*.svg', '!' + src + '/**/*.map']);
+		const processedSvgFiles: VinylFile[] = [];
+		for await (const f of svgStream) {
+			processedSvgFiles.push(f as VinylFile);
+		}
+
+		// Output
+		const outStream = mergeStream(
+			stream.Readable.from(processedJsFiles),
+			stream.Readable.from(processedCssFiles),
+			stream.Readable.from(processedSvgFiles)
+		);
+
+		outStream
+			.pipe(sourcemaps.write('./', {
 				sourceMappingURL,
 				sourceRoot: undefined,
 				includeContent: true,
 				addComment: true
-			} as any),
-			gulp.dest(src + '-min'),
-			(err: any) => cb(err));
+			} as any))
+			.pipe(gulp.dest(src + '-min'))
+			.on('end', () => cb())
+			.on('error', (err: any) => cb(err));
 	};
 }

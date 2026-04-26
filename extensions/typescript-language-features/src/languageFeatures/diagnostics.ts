@@ -7,11 +7,19 @@ import * as vscode from 'vscode';
 import { TypeScriptServiceConfiguration } from '../configuration/configuration';
 import { DiagnosticLanguage } from '../configuration/languageDescription';
 import { TelemetryReporter } from '../logging/telemetry';
-import { DiagnosticPerformanceData as TsDiagnosticPerformanceData } from '../tsServer/protocol/protocol';
 import * as arrays from '../utils/arrays';
 import { Disposable } from '../utils/dispose';
 import { equals } from '../utils/objects';
 import { ResourceMap } from '../utils/resourceMap';
+
+// DiagnosticPerformanceData - defined locally since TypeScript 5.4+ protocol types don't re-export cleanly
+interface DiagnosticPerformanceData {
+	syntaxDiag?: number;
+	semanticDiag?: number;
+	suggestionDiag?: number;
+	regionSemanticDiag?: number;
+	fileLineCount?: number;
+}
 
 function diagnosticsEquals(a: vscode.Diagnostic, b: vscode.Diagnostic): boolean {
 	if (a === b) {
@@ -172,10 +180,6 @@ class DiagnosticSettings {
 		this._languageSettings.set(language, newSettings);
 		return !areLanguageDiagnosticSettingsEqual(currentSettings, newSettings);
 	}
-}
-
-interface DiagnosticPerformanceData extends TsDiagnosticPerformanceData {
-	fileLineCount?: number;
 }
 
 class DiagnosticsTelemetryManager extends Disposable {

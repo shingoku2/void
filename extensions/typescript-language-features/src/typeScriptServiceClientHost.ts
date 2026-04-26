@@ -22,7 +22,7 @@ import { OngoingRequestCancellerFactory } from './tsServer/cancellation';
 import { ILogDirectoryProvider } from './tsServer/logDirectoryProvider';
 import { PluginManager } from './tsServer/plugins';
 import * as errorCodes from './tsServer/protocol/errorCodes';
-import * as Proto from './tsServer/protocol/protocol';
+import type * as Proto from './tsServer/protocol/protocol';
 import * as PConst from './tsServer/protocol/protocol.const';
 import { TsServerProcessFactory } from './tsServer/server';
 import { ITypeScriptVersionProvider } from './tsServer/versionProvider';

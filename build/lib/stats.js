@@ -8,7 +8,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStatsStream = createStatsStream;
-const event_stream_1 = __importDefault(require("event-stream"));
+const through2_1 = __importDefault(require("through2"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
 class Entry {
@@ -46,7 +46,7 @@ const _entries = new Map();
 function createStatsStream(group, log) {
     const entry = new Entry(group, 0, 0);
     _entries.set(entry.name, entry);
-    return event_stream_1.default.through(function (data) {
+    return through2_1.default.obj(function (data, _enc, callback) {
         const file = data;
         if (typeof file.path === 'string') {
             entry.totalCount += 1;
@@ -60,8 +60,8 @@ function createStatsStream(group, log) {
                 // funky file...
             }
         }
-        this.emit('data', data);
-    }, function () {
+        callback(null, data);
+    }, function (callback) {
         if (log) {
             if (entry.totalCount === 1) {
                 (0, fancy_log_1.default)(`Stats for '${ansi_colors_1.default.grey(entry.name)}': ${Math.round(entry.totalSize / 1204)}KB`);
@@ -73,7 +73,7 @@ function createStatsStream(group, log) {
                 (0, fancy_log_1.default)(`Stats for '${ansi_colors_1.default.grey(entry.name)}': ${count} files, ${Math.round(entry.totalSize / 1204)}KB`);
             }
         }
-        this.emit('end');
+        callback();
     });
 }
 //# sourceMappingURL=stats.js.map

@@ -49,12 +49,6 @@ class ShortIdent {
         return result;
     }
 }
-var FieldType;
-(function (FieldType) {
-    FieldType[FieldType["Public"] = 0] = "Public";
-    FieldType[FieldType["Protected"] = 1] = "Protected";
-    FieldType[FieldType["Private"] = 2] = "Private";
-})(FieldType || (FieldType = {}));
 class ClassData {
     fileName;
     node;
@@ -660,4 +654,3 @@ async function _run() {
 if (__filename === process_1.argv[1]) {
     _run();
 }
-//# sourceMappingURL=index.js.map

@@ -212,6 +212,9 @@ function computeChecksums(out, filenames) {
  * @return {string} The checksum for `filename`.
  */
 function computeChecksum(filename) {
+	if (!fs.existsSync(filename)) {
+		return '';
+	}
 	const contents = fs.readFileSync(filename);
 
 	const hash = crypto
@@ -244,7 +247,7 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			'vs/code/electron-sandbox/workbench/workbench.js'
 		]);
 
-		const src = gulp.src(out + '/**', { base: '.' })
+		let src = gulp.src(out + '/**', { base: '.' })
 			.pipe(rename(function (path) { path.dirname = path.dirname.replace(new RegExp('^' + out), 'out'); }))
 			.pipe(util.setExecutableBit(['**/*.sh']));
 
@@ -259,7 +262,7 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 
 		const extensions = gulp.src(['.build/extensions/**', ...platformSpecificBuiltInExtensionsExclusions], { base: '.build', dot: true });
 
-		const sources = es.merge(src, extensions)
+		let sources = es.merge(src, extensions)
 			.pipe(filter(['**', '!**/*.js.map'], { dot: true }));
 
 		let version = packageJson.version;
@@ -304,14 +307,16 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 		const productionDependencies = getProductionDependencies(root);
 		const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat().concat('!**/*.mk');
 
-		const deps = gulp.src(dependenciesSrc, { base: '.', dot: true })
+		let deps = gulp.src(dependenciesSrc, { base: '.', dot: true })
 			.pipe(filter(['**', `!**/${config.version}/**`, '!**/bin/darwin-arm64-87/**', '!**/package-lock.json', '!**/yarn.lock', '!**/*.js.map']))
 			.pipe(util.cleanNodeModules(path.join(__dirname, '.moduleignore')))
 			.pipe(util.cleanNodeModules(path.join(__dirname, `.moduleignore.${process.platform}`)))
 			.pipe(jsFilter)
 			.pipe(util.rewriteSourceMappingURL(sourceMappingURLBase))
-			.pipe(jsFilter.restore)
-			.pipe(createAsar(path.join(process.cwd(), 'node_modules'), [
+			.pipe(jsFilter.restore);
+
+		if (platform !== 'win32') {
+			deps = deps.pipe(createAsar(path.join(process.cwd(), 'node_modules'), [
 				'**/*.node',
 				'**/@vscode/ripgrep/bin/*',
 				'**/node-pty/build/Release/*',
@@ -326,6 +331,7 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			], [
 				'node_modules/vsda/**' // retain copy of `vsda` in node_modules for internal use
 			], 'node_modules.asar'));
+		}
 
 		let all = es.merge(
 			packageJsonStream,
@@ -382,8 +388,9 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 
 		let result = all
 			.pipe(util.skipDirectories())
-			.pipe(util.fixWin32DirectoryPermissions())
-			.pipe(filter(['**', '!**/.github/**'], { dot: true })) // https://github.com/microsoft/vscode/issues/116523
+			.pipe(util.fixWin32DirectoryPermissions());
+		result = result
+			.pipe(filter(['**', '!**/.github/**'], { dot: true }))
 			.pipe(electron({ ...config, platform, arch: arch === 'armhf' ? 'arm' : arch, ffmpegChromium: false }))
 			.pipe(filter(['**', '!LICENSE', '!version'], { dot: true }));
 
@@ -435,7 +442,6 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			packageJsonFn: () => packageJsonContents,
 			productJsonFn: () => productJsonContents
 		});
-
 		return result.pipe(vfs.dest(destination));
 	};
 }

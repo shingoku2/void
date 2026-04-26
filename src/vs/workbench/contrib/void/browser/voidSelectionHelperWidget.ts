@@ -39,6 +39,9 @@ export class SelectionHelperContribution extends Disposable implements IEditorCo
 	private _isVisible = false;
 	private _showScheduler: RunOnceScheduler;
 	private _lastSelection: Selection | null = null;
+	private _isMouseOverWidget = false;
+	private readonly _mouseEnterHandler = () => { this._isMouseOverWidget = true; };
+	private readonly _mouseLeaveHandler = () => { this._isMouseOverWidget = false; };
 
 	constructor(
 		private readonly _editor: ICodeEditor,
@@ -89,18 +92,15 @@ export class SelectionHelperContribution extends Disposable implements IEditorCo
 		// Register event listeners
 		this._register(this._editor.onDidChangeCursorSelection(e => this._onSelectionChange(e)));
 
-		// Add a flag to track if mouse is over the widget
-		let isMouseOverWidget = false;
-		this._rootHTML.addEventListener('mouseenter', () => {
-			isMouseOverWidget = true;
-		});
-		this._rootHTML.addEventListener('mouseleave', () => {
-			isMouseOverWidget = false;
-		});
+		// Track if mouse is over the widget
+		// Note: These listeners are manually removed in dispose() since addEventListener
+		// is not compatible with this._register() pattern for DOM elements
+		this._rootHTML.addEventListener('mouseenter', this._mouseEnterHandler);
+		this._rootHTML.addEventListener('mouseleave', this._mouseLeaveHandler);
 
 		// Only hide helper when text editor loses focus and mouse is not over the widget
 		this._register(this._editor.onDidBlurEditorText(() => {
-			if (!isMouseOverWidget) {
+			if (!this._isMouseOverWidget) {
 				this._hideHelper();
 			}
 		}));
@@ -274,6 +274,8 @@ export class SelectionHelperContribution extends Disposable implements IEditorCo
 		}
 		this._editor.removeOverlayWidget(this);
 		this._showScheduler.dispose();
+		this._rootHTML.removeEventListener('mouseenter', this._mouseEnterHandler);
+		this._rootHTML.removeEventListener('mouseleave', this._mouseLeaveHandler);
 		super.dispose();
 	}
 }

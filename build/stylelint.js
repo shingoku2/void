@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-const es = require('event-stream');
+const through2 = require('through2');
 const vfs = require('vinyl-fs');
 const { stylelintFilter } = require('./filters');
 const { getVariableNameValidator } = require('./lib/stylelint/validateVariableNames');
@@ -14,7 +14,7 @@ module.exports = gulpstylelint;
 function gulpstylelint(reporter) {
 	const variableValidator = getVariableNameValidator();
 	let errorCount = 0;
-	return es.through(function (file) {
+	return through2.obj(function (file, _enc, cb) {
 		const lines = file.__lines || file.contents.toString('utf8').split(/\r\n|\r|\n/);
 		file.__lines = lines;
 
@@ -25,12 +25,12 @@ function gulpstylelint(reporter) {
 			});
 		});
 
-		this.emit('data', file);
-	}, function () {
+		cb(null, file);
+	}, function (cb) {
 		if (errorCount > 0) {
 			reporter('All valid variable names are in `build/lib/stylelint/vscode-known-variables.json`\nTo update that file, run `./scripts/test-documentation.sh|bat.`', false);
 		}
-		this.emit('end');
+		cb();
 	}
 	);
 }
@@ -45,7 +45,7 @@ function stylelint() {
 				console.info(message);
 			}
 		}))
-		.pipe(es.through(function () { /* noop, important for the stream to end */ }));
+		.pipe(through2.obj(function (file, _enc, cb) { cb(null, file); }));
 }
 
 if (require.main === module) {

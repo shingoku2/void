@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-const es = require('event-stream');
+const through2 = require('through2');
 const vfs = require('vinyl-fs');
 const { eslintFilter } = require('./filters');
 
@@ -17,7 +17,7 @@ function eslint() {
 					throw new Error('eslint failed with warnings and/or errors');
 				}
 			})
-		).pipe(es.through(function () { /* noop, important for the stream to end */ }));
+		).pipe(through2.obj(function (file, _enc, cb) { cb(null, file); }));
 }
 
 if (require.main === module) {

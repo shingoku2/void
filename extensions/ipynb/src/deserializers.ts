@@ -124,7 +124,8 @@ function convertJupyterOutputToBuffer(mime: string, value: unknown): NotebookCel
 			// Images in Jupyter are stored in base64 encoded format.
 			// VS Code expects bytes when rendering images.
 			if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
-				return new NotebookCellOutputItem(Buffer.from(value, 'base64'), mime);
+				const data = new Uint8Array(Buffer.from(value, 'base64'));
+				return new NotebookCellOutputItem(data, mime);
 			} else {
 				const data = Uint8Array.from(atob(value), c => c.charCodeAt(0));
 				return new NotebookCellOutputItem(data, mime);

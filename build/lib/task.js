@@ -59,8 +59,25 @@ async function _doExecute(task) {
             return;
         }
         // this is a stream returning task
-        taskResult.on('end', _ => resolve());
-        taskResult.on('error', err => reject(err));
+        let done = false;
+        const onResolve = () => {
+            if (done) {
+                return;
+            }
+            done = true;
+            resolve();
+        };
+        const onReject = (err) => {
+            if (done) {
+                return;
+            }
+            done = true;
+            reject(err);
+        };
+        taskResult.on('finish', onResolve);
+        taskResult.on('end', onResolve);
+        taskResult.on('close', onResolve);
+        taskResult.on('error', onReject);
     });
 }
 function series(...tasks) {
@@ -97,4 +114,3 @@ function define(name, task) {
     task.displayName = name;
     return task;
 }
-//# sourceMappingURL=task.js.map

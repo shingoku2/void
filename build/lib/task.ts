@@ -77,8 +77,25 @@ async function _doExecute(task: Task): Promise<void> {
 		}
 
 		// this is a stream returning task
-		taskResult.on('end', _ => resolve());
-		taskResult.on('error', err => reject(err));
+		let done = false;
+		const onResolve = () => {
+			if (done) {
+				return;
+			}
+			done = true;
+			resolve();
+		};
+		const onReject = (err: Error) => {
+			if (done) {
+				return;
+			}
+			done = true;
+			reject(err);
+		};
+		taskResult.on('finish', onResolve);
+		taskResult.on('end', onResolve);
+		taskResult.on('close', onResolve);
+		taskResult.on('error', onReject);
 	});
 }
 

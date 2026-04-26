@@ -7,9 +7,9 @@ import path from 'path';
 import cp from 'child_process';
 import fs from 'fs';
 import File from 'vinyl';
-import es from 'event-stream';
 import filter from 'gulp-filter';
-import { Stream } from 'stream';
+import { PassThrough } from 'stream';
+import through2 from 'through2';
 
 const watcherPath = path.join(__dirname, 'watcher.exe');
 
@@ -21,8 +21,8 @@ function toChangeType(type: '0' | '1' | '2'): 'change' | 'add' | 'unlink' {
 	}
 }
 
-function watch(root: string): Stream {
-	const result = es.through();
+function watch(root: string): PassThrough {
+	const result = new PassThrough();
 	let child: cp.ChildProcess | null = cp.spawn(watcherPath, [root]);
 
 	child.stdout!.on('data', function (data) {
@@ -68,7 +68,7 @@ function watch(root: string): Stream {
 	return result;
 }
 
-const cache: { [cwd: string]: Stream } = Object.create(null);
+const cache: { [cwd: string]: PassThrough } = Object.create(null);
 
 module.exports = function (pattern: string | string[] | filter.FileFunction, options?: { cwd?: string; base?: string; dot?: boolean }) {
 	options = options || {};
@@ -80,15 +80,17 @@ module.exports = function (pattern: string | string[] | filter.FileFunction, opt
 		watcher = cache[cwd] = watch(cwd);
 	}
 
-	const rebase = !options.base ? es.through() : es.mapSync(function (f: File) {
-		f.base = options!.base!;
-		return f;
-	});
+	const rebase = !options.base
+		? through2.obj()
+		: through2.obj(function (f: File, _enc, cb) {
+			f.base = options!.base!;
+			cb(null, f);
+		});
 
 	return watcher
 		.pipe(filter(['**', '!.git{,/**}'], { dot: options.dot })) // ignore all things git
 		.pipe(filter(pattern, { dot: options.dot }))
-		.pipe(es.map(function (file: File, cb) {
+		.pipe(through2.obj(function (file: File, _enc, cb) {
 			fs.stat(file.path, function (err, stat) {
 				if (err && err.code === 'ENOENT') { return cb(undefined, file); }
 				if (err) { return cb(); }
