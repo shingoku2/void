@@ -54,30 +54,92 @@ export type VoidSettingsState = {
 
 export interface IVoidSettingsService {
 	readonly _serviceBrand: undefined;
-	readonly state: VoidSettingsState; // in order to play nicely with react, you should immutably change state
+
+	/**
+	 * Current settings state. React-compatible — replace immutably to trigger updates.
+	 */
+	readonly state: VoidSettingsState;
+
+	/**
+	 * Resolves when initial state has been read from storage.
+	 * Await this if you need a valid state on startup.
+	 */
 	readonly waitForInitState: Promise<void>;
 
+	/** Fires when any setting changes */
 	onDidChangeState: Event<void>;
 
+	/**
+	 * Updates a specific setting for a provider (e.g., API key, base URL).
+	 */
 	setSettingOfProvider: SetSettingOfProviderFn;
-	setModelSelectionOfFeature: SetModelSelectionOfFeatureFn;
-	setOptionsOfModelSelection: SetOptionsOfModelSelection;
-	setGlobalSetting: SetGlobalSettingFn;
-	// setMCPServerStates: (newStates: MCPServerStates) => Promise<void>;
 
-	// setting to undefined CLEARS it, unlike others:
+	/**
+	 * Updates the model selection for a feature (Chat, Ctrl+K, Autocomplete, Apply, SCM).
+	 */
+	setModelSelectionOfFeature: SetModelSelectionOfFeatureFn;
+
+	/**
+	 * Updates per-model options for a feature (e.g., temperature, max tokens).
+	 */
+	setOptionsOfModelSelection: SetOptionsOfModelSelection;
+
+	/**
+	 * Updates a global setting (e.g., chatMode, autoApprove).
+	 */
+	setGlobalSetting: SetGlobalSettingFn;
+
+	/**
+	 * Sets model-specific overrides (e.g., custom instructions per model).
+	 * Pass `undefined` to clear overrides for a model.
+	 */
 	setOverridesOfModel(providerName: ProviderName, modelName: string, overrides: Partial<ModelOverrides> | undefined): Promise<void>;
 
+	/**
+	 * Replaces the entire settings state. Validates and normalizes the new state.
+	 * Use with caution — prefer individual setters when possible.
+	 */
 	dangerousSetState(newState: VoidSettingsState): Promise<void>;
+
+	/**
+	 * Resets all settings to defaults.
+	 */
 	resetState(): Promise<void>;
 
+	/**
+	 * Sets autodetected model names for a provider (e.g., from /models endpoint).
+	 * Replaces existing autodetected models of the same type.
+	 */
 	setAutodetectedModels(providerName: ProviderName, modelNames: string[], logging: object): void;
+
+	/**
+	 * Toggles whether a model is hidden in the UI.
+	 */
 	toggleModelHidden(providerName: ProviderName, modelName: string): void;
+
+	/**
+	 * Adds a custom model to a provider.
+	 */
 	addModel(providerName: ProviderName, modelName: string): void;
+
+	/**
+	 * Deletes a custom model from a provider. Returns true if deleted, false if not found.
+	 */
 	deleteModel(providerName: ProviderName, modelName: string): boolean;
 
+	/**
+	 * Adds or updates MCP server user state.
+	 */
 	addMCPUserStateOfNames(userStateOfName: MCPUserStateOfName): Promise<void>;
+
+	/**
+	 * Removes MCP server user state for the given server names.
+	 */
 	removeMCPUserStateOfNames(serverNames: string[]): Promise<void>;
+
+	/**
+	 * Updates the state of a single MCP server.
+	 */
 	setMCPServerState(serverName: string, state: MCPUserState): Promise<void>;
 }
 
@@ -367,9 +429,15 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 
 	private async _storeState() {
-		const state = this.state
-		const encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
-		this._storageService.store(VOID_SETTINGS_STORAGE_KEY, encryptedState, StorageScope.APPLICATION, StorageTarget.USER);
+		// Error handling: If encryption or storage fails, log the error and continue.
+		// This ensures Void can still function even if settings persistence fails.
+		try {
+			const state = this.state
+			const encryptedState = await this._encryptionService.encrypt(JSON.stringify(state))
+			this._storageService.store(VOID_SETTINGS_STORAGE_KEY, encryptedState, StorageScope.APPLICATION, StorageTarget.USER);
+		} catch (e) {
+			console.error('Void: Failed to store settings, continuing with in-memory state. Error:', e);
+		}
 	}
 
 	setSettingOfProvider: SetSettingOfProviderFn = async (providerName, settingName, newVal) => {

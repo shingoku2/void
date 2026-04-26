@@ -359,7 +359,17 @@ export const compileApiProposalNamesTask = task.define('compile-api-proposal-nam
 			.pipe(apiProposalNamesReporter.end(true))
 			.pipe(gulp.dest('src'));
 
-		stream.on('finish', resolve);
+		let settled = false;
+		const done = () => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			resolve();
+		};
+		stream.on('finish', done);
+		stream.on('end', done);
+		stream.on('close', done);
 		stream.on('error', reject);
 	});
 });

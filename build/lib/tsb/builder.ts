@@ -110,150 +110,147 @@ export function createTypeScriptBuilder(config: IConfiguration, projectFile: str
 			});
 		}
 
-		function emitSoon(fileName: string): Promise<{ fileName: string; signature?: string; files: Vinyl[] }> {
+	function emitSoon(fileName: string): Promise<{ fileName: string; signature?: string; files: Vinyl[] }> {
 
-			return new Promise(resolve => {
-				process.nextTick(function () {
+		return new Promise(resolve => {
+			process.nextTick(async function () {
 
-					if (/\.d\.ts$/.test(fileName)) {
-						// if it's already a d.ts file just emit it signature
-						const snapshot = host.getScriptSnapshot(fileName);
-						const signature = crypto.createHash('sha256')
-							.update(snapshot.getText(0, snapshot.getLength()))
-							.digest('base64');
+				if (/\.d\.ts$/.test(fileName)) {
+					// if it's already a d.ts file just emit it signature
+					const snapshot = host.getScriptSnapshot(fileName);
+					const signature = crypto.createHash('sha256')
+						.update(snapshot.getText(0, snapshot.getLength()))
+						.digest('base64');
 
-						return resolve({
-							fileName,
-							signature,
-							files: []
-						});
-					}
-
-					const output = service.getEmitOutput(fileName);
-					const files: Vinyl[] = [];
-					let signature: string | undefined;
-
-					for (const file of output.outputFiles) {
-						if (!emitSourceMapsInStream && /\.js\.map$/.test(file.name)) {
-							continue;
-						}
-
-						if (/\.d\.ts$/.test(file.name)) {
-							signature = crypto.createHash('sha256')
-								.update(file.text)
-								.digest('base64');
-
-							if (!userWantsDeclarations) {
-								// don't leak .d.ts files if users don't want them
-								continue;
-							}
-						}
-
-						const vinyl = new Vinyl({
-							path: file.name,
-							contents: Buffer.from(file.text),
-							base: !config._emitWithoutBasePath && baseFor(host.getScriptSnapshot(fileName)) || undefined
-						});
-
-						if (!emitSourceMapsInStream && /\.js$/.test(file.name)) {
-							const sourcemapFile = output.outputFiles.filter(f => /\.js\.map$/.test(f.name))[0];
-
-							if (sourcemapFile) {
-								const extname = path.extname(vinyl.relative);
-								const basename = path.basename(vinyl.relative, extname);
-								const dirname = path.dirname(vinyl.relative);
-								const tsname = (dirname === '.' ? '' : dirname + '/') + basename + '.ts';
-
-								let sourceMap = <RawSourceMap>JSON.parse(sourcemapFile.text);
-								sourceMap.sources[0] = tsname.replace(/\\/g, '/');
-
-								// check for an "input source" map and combine them
-								// in step 1 we extract all line edit from the input source map, and
-								// in step 2 we apply the line edits to the typescript source map
-								const snapshot = host.getScriptSnapshot(fileName);
-								if (snapshot instanceof VinylScriptSnapshot && snapshot.sourceMap) {
-									const inputSMC = new SourceMapConsumer(snapshot.sourceMap);
-									const tsSMC = new SourceMapConsumer(sourceMap);
-									let didChange = false;
-									const smg = new SourceMapGenerator({
-										file: sourceMap.file,
-										sourceRoot: sourceMap.sourceRoot
-									});
-
-									// step 1
-									const lineEdits = new Map<number, [from: number, to: number][]>();
-									inputSMC.eachMapping(m => {
-										if (m.originalLine === m.generatedLine) {
-											// same line mapping
-											let array = lineEdits.get(m.originalLine);
-											if (!array) {
-												array = [];
-												lineEdits.set(m.originalLine, array);
-											}
-											array.push([m.originalColumn, m.generatedColumn]);
-										} else {
-											// NOT SUPPORTED
-										}
-									});
-
-									// step 2
-									tsSMC.eachMapping(m => {
-										didChange = true;
-										const edits = lineEdits.get(m.originalLine);
-										let originalColumnDelta = 0;
-										if (edits) {
-											for (const [from, to] of edits) {
-												if (to >= m.originalColumn) {
-													break;
-												}
-												originalColumnDelta = from - to;
-											}
-										}
-										smg.addMapping({
-											source: m.source,
-											name: m.name,
-											generated: { line: m.generatedLine, column: m.generatedColumn },
-											original: { line: m.originalLine, column: m.originalColumn + originalColumnDelta }
-										});
-									});
-
-									if (didChange) {
-
-										[tsSMC, inputSMC].forEach((consumer) => {
-											(<SourceMapConsumer & { sources: string[] }>consumer).sources.forEach((sourceFile: any) => {
-												(<any>smg)._sources.add(sourceFile);
-												const sourceContent = consumer.sourceContentFor(sourceFile);
-												if (sourceContent !== null) {
-													smg.setSourceContent(sourceFile, sourceContent);
-												}
-											});
-										});
-
-										sourceMap = JSON.parse(smg.toString());
-
-										// const filename = '/Users/jrieken/Code/vscode/src2/' + vinyl.relative + '.map';
-										// fs.promises.mkdir(path.dirname(filename), { recursive: true }).then(async () => {
-										// 	await fs.promises.writeFile(filename, smg.toString());
-										// 	await fs.promises.writeFile('/Users/jrieken/Code/vscode/src2/' + vinyl.relative, vinyl.contents);
-										// });
-									}
-								}
-
-								(<any>vinyl).sourceMap = sourceMap;
-							}
-						}
-
-						files.push(vinyl);
-					}
-
-					resolve({
+					return resolve({
 						fileName,
 						signature,
-						files
+						files: []
 					});
+				}
+
+				const output = service.getEmitOutput(fileName);
+				const files: Vinyl[] = [];
+				let signature: string | undefined;
+
+				for (const file of output.outputFiles) {
+					if (!emitSourceMapsInStream && /\.js\.map$/.test(file.name)) {
+						continue;
+					}
+
+					if (/\.d\.ts$/.test(file.name)) {
+						signature = crypto.createHash('sha256')
+							.update(file.text)
+							.digest('base64');
+
+						if (!userWantsDeclarations) {
+							// don't leak .d.ts files if users don't want them
+							continue;
+						}
+					}
+
+					const vinyl = new Vinyl({
+						path: file.name,
+						contents: Buffer.from(file.text),
+						base: !config._emitWithoutBasePath && baseFor(host.getScriptSnapshot(fileName)) || undefined
+					});
+
+					if (!emitSourceMapsInStream && /\.js$/.test(file.name)) {
+						const sourcemapFile = output.outputFiles.filter(f => /\.js\.map$/.test(f.name))[0];
+
+						if (sourcemapFile) {
+							const extname = path.extname(vinyl.relative);
+							const basename = path.basename(vinyl.relative, extname);
+							const dirname = path.dirname(vinyl.relative);
+							const tsname = (dirname === '.' ? '' : dirname + '/') + basename + '.ts';
+
+							let sourceMap = <RawSourceMap>JSON.parse(sourcemapFile.text);
+							sourceMap.sources[0] = tsname.replace(/\\/g, '/');
+
+							// check for an "input source" map and combine them
+							// in step 1 we extract all line edit from the input source map, and
+							// in step 2 we apply the line edits to the typescript source map
+							const snapshot = host.getScriptSnapshot(fileName);
+							if (snapshot instanceof VinylScriptSnapshot && snapshot.sourceMap) {
+								const inputSMC = await new SourceMapConsumer(snapshot.sourceMap);
+								const tsSMC = await new SourceMapConsumer(sourceMap);
+								let didChange = false;
+								const smg = new SourceMapGenerator({
+									file: sourceMap.file,
+									sourceRoot: sourceMap.sourceRoot
+								});
+
+								// step 1
+								const lineEdits = new Map<number, [from: number, to: number][]>();
+								inputSMC.eachMapping(m => {
+									if (m.originalLine === m.generatedLine) {
+										// same line mapping
+										let array = lineEdits.get(m.originalLine);
+										if (!array) {
+											array = [];
+											lineEdits.set(m.originalLine, array);
+										}
+										array.push([m.originalColumn, m.generatedColumn]);
+									} else {
+										// NOT SUPPORTED
+									}
+								});
+
+								// step 2
+								tsSMC.eachMapping(m => {
+									didChange = true;
+									const edits = lineEdits.get(m.originalLine);
+									let originalColumnDelta = 0;
+									if (edits) {
+										for (const [from, to] of edits) {
+											if (to >= m.originalColumn) {
+												break;
+											}
+											originalColumnDelta = from - to;
+										}
+									}
+									smg.addMapping({
+										source: m.source,
+										name: m.name,
+										generated: { line: m.generatedLine, column: m.generatedColumn },
+										original: { line: m.originalLine, column: m.originalColumn + originalColumnDelta }
+									});
+								});
+
+								if (didChange) {
+
+									[tsSMC, inputSMC].forEach((consumer) => {
+										(<SourceMapConsumer & { sources: string[] }>consumer).sources.forEach((sourceFile: any) => {
+											(<any>smg)._sources.add(sourceFile);
+											const sourceContent = consumer.sourceContentFor(sourceFile);
+											if (sourceContent !== null) {
+												smg.setSourceContent(sourceFile, sourceContent);
+											}
+										});
+									});
+
+									sourceMap = JSON.parse(smg.toString());
+								}
+
+								inputSMC.destroy();
+								tsSMC.destroy();
+							}
+
+							(<any>vinyl).sourceMap = sourceMap;
+						}
+					}
+
+					files.push(vinyl);
+				}
+
+				resolve({
+					fileName,
+					signature,
+					files
 				});
 			});
-		}
+		});
+	}
 
 		const newErrors: { [path: string]: ts.Diagnostic[] } = Object.create(null);
 		const t1 = Date.now();

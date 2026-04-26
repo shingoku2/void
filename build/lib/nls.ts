@@ -55,17 +55,17 @@ function clone<T extends object>(object: T): T {
  */
 export function nls(options: { preserveEnglish: boolean }): NodeJS.ReadWriteStream {
 	let base: string;
-	const input = through2();
+	const input = through2.obj();
 	const output = input
 		.pipe(sort())
-		.pipe(through2(function (f: FileSourceMap) {
-			if (!f.sourceMap) {
-				return this.emit('error', new Error(`File ${f.relative} does not have sourcemaps.`));
+		.pipe(through2.obj(function (f: FileSourceMap, _enc, cb) {
+			if (!f.sourceMap || !/\.js$/.test(f.path)) {
+				return cb(null, f);
 			}
 
 			let source = f.sourceMap.sources[0];
 			if (!source) {
-				return this.emit('error', new Error(`File ${f.relative} does not have a source in the source map.`));
+				return cb(null, f);
 			}
 
 			const root = f.sourceMap.sourceRoot;
@@ -75,12 +75,12 @@ export function nls(options: { preserveEnglish: boolean }): NodeJS.ReadWriteStre
 
 			const typescript = f.sourceMap.sourcesContent![0];
 			if (!typescript) {
-				return this.emit('error', new Error(`File ${f.relative} does not have the original content in the source map.`));
+				return cb(new Error(`File ${f.relative} does not have the original content in the source map.`));
 			}
 
 			base = f.base;
-			this.emit('data', _nls.patchFile(f, typescript, options));
-		}, function () {
+			cb(null, _nls.patchFile(f, typescript, options));
+		}, function (cb) {
 			for (const file of [
 				new File({
 					contents: Buffer.from(JSON.stringify({
@@ -109,19 +109,45 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
 					path: `${base}/nls.messages.js`
 				})
 			]) {
-				this.emit('data', file);
+				this.push(file);
 			}
 
-			this.emit('end');
+			cb();
 		}));
 
 	return createDuplex(input, output);
 }
 function createDuplex(input: Writable, output: NodeJS.ReadWriteStream): NodeJS.ReadWriteStream {
-	const passThrough = new PassThrough({ objectMode: true });
-	passThrough.pipe(input);
-	output.pipe(passThrough);
-	return passThrough;
+	const { Duplex } = require('stream') as typeof import('stream');
+	const combined = new Duplex({
+		objectMode: true,
+		write(chunk: any, enc: string, cb: () => void) {
+			if ((input as any).write(chunk, enc)) {
+				cb();
+			} else {
+				input.once('drain', cb);
+			}
+		},
+		final(cb: () => void) {
+			input.end();
+			cb();
+		},
+		read() { }
+	});
+	output.on('data', (chunk: any) => {
+		if (!combined.push(chunk) && typeof (output as any).pause === 'function') {
+			(output as any).pause();
+		}
+	});
+	combined.on('drain', () => {
+		if (typeof (output as any).resume === 'function') {
+			(output as any).resume();
+		}
+	});
+	output.on('end', () => combined.push(null));
+	output.on('error', (err: Error) => combined.destroy(err));
+	input.on('error', (err: Error) => combined.destroy(err));
+	return combined as unknown as NodeJS.ReadWriteStream;
 }
 
 function isImportNode(ts: typeof import('typescript'), node: ts.Node): boolean {

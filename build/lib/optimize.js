@@ -90,22 +90,27 @@ function bundleESMTask(opts) {
             const contentsMapper = {
                 name: 'contents-mapper',
                 setup(build) {
-                    build.onLoad({ filter: /\.js$/ }, async ({ path }) => {
-                        const contents = await fs_1.default.promises.readFile(path, 'utf-8');
-                        // TS Boilerplate
+                    build.onLoad({ filter: /\.(js|ts)$/ }, async ({ path: filePath }) => {
+                        const contents = await fs_1.default.promises.readFile(filePath, 'utf-8');
+                        const isTS = filePath.endsWith('.ts');
+                        // TS Boilerplate (only for .js files)
                         let newContents;
-                        if (!opts.skipTSBoilerplateRemoval?.(entryPoint.name)) {
+                        if (!isTS && !opts.skipTSBoilerplateRemoval?.(entryPoint.name)) {
                             newContents = bundle.removeAllTSBoilerplate(contents);
                         }
                         else {
                             newContents = contents;
                         }
                         // File Content Mapper
-                        const mapper = opts.fileContentMapper?.(path.replace(/\\/g, '/'));
+                        let normalizedPath = filePath.replace(/\\/g, '/');
+                        let mapper = opts.fileContentMapper?.(normalizedPath);
+                        if (!mapper && isTS) {
+                            mapper = opts.fileContentMapper?.(normalizedPath.replace(/\.ts$/, '.js'));
+                        }
                         if (mapper) {
                             newContents = await mapper(newContents);
                         }
-                        return { contents: newContents };
+                        return { contents: newContents, loader: isTS ? 'ts' : 'js' };
                     });
                 }
             };
@@ -145,14 +150,26 @@ function bundleESMTask(opts) {
                 write: false, // enables res.outputFiles
                 metafile: true, // enables res.metafile
                 // minify: NOT enabled because we have a separate minify task that takes care of the TSLib banner as well
-            }).then(res => {
+            }).then(async (res) => {
                 for (const file of res.outputFiles) {
                     let sourceMapFile = undefined;
                     if (file.path.endsWith('.js')) {
                         sourceMapFile = res.outputFiles.find(f => f.path === `${file.path}.map`);
                     }
+                    let contents = Buffer.from(file.contents);
+                    // Apply fileContentMapper post-bundling for .js output files.
+                    // The onLoad hook may not fire for entry points when esbuild
+                    // resolves .js -> .ts, so we apply the mapper here as a fallback.
+                    if (file.path.endsWith('.js') && opts.fileContentMapper) {
+                        const normalizedPath = file.path.replace(/\\/g, '/');
+                        const mapper = opts.fileContentMapper(normalizedPath);
+                        if (mapper) {
+                            const mapped = await mapper(contents.toString('utf-8'));
+                            contents = Buffer.from(mapped);
+                        }
+                    }
                     const fileProps = {
-                        contents: Buffer.from(file.contents),
+                        contents,
                         sourceMap: sourceMapFile ? JSON.parse(sourceMapFile.text) : undefined, // support gulp-sourcemaps
                         path: file.path,
                         base: path_1.default.join(REPO_ROOT_PATH, opts.src)
@@ -170,6 +187,9 @@ function bundleESMTask(opts) {
         stream.Readable.from(output.files).pipe(bundlesStream);
         // forward all resources
         gulp_1.default.src(opts.resources ?? [], { base: `${opts.src}`, allowEmpty: true }).pipe(resourcesStream);
+    }).catch(err => {
+        // Forward esbuild failures as stream errors to avoid unhandled promise rejection
+        result.emit('error', err);
     });
     const result = (0, merge_stream_1.default)(bundlesStream, resourcesStream);
     return result

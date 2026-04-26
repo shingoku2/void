@@ -9,8 +9,8 @@ const minorNodeVersion = parseInt(nodeVersion[2]);
 const patchNodeVersion = parseInt(nodeVersion[3]);
 
 if (!process.env['VSCODE_SKIP_NODE_VERSION_CHECK']) {
-	if (majorNodeVersion < 20 || (majorNodeVersion === 20 && minorNodeVersion < 18) || (majorNodeVersion === 20 && minorNodeVersion === 18 && patchNodeVersion < 1)) {
-		console.error('\x1b[1;31m*** Please use Node.js v20.18.1 or later for development.\x1b[0;0m');
+	if (majorNodeVersion < 20 || (majorNodeVersion === 20 && minorNodeVersion < 18) || (majorNodeVersion === 20 && minorNodeVersion === 18 && patchNodeVersion < 2)) {
+		console.error('\x1b[1;31m*** Please use Node.js v20.18.2 or later for development.\x1b[0;0m');
 		throw new Error();
 	}
 }
@@ -34,8 +34,9 @@ if (process.platform === 'win32') {
 }
 
 if (process.arch !== os.arch()) {
-	console.error(`\x1b[1;31m*** ARCHITECTURE MISMATCH: The node.js process is ${process.arch}, but your OS architecture is ${os.arch()}. ***\x1b[0;0m`);
-	console.error(`\x1b[1;31m*** This can greatly increase the build time of vs code. ***\x1b[0;0m`);
+	console.warn(`\x1b[1;33m*** ARCHITECTURE MISMATCH: The node.js process is ${process.arch}, but your OS architecture is ${os.arch()}. ***\x1b[0;0m`);
+	console.warn(`\x1b[1;33m*** This is expected when using Rosetta/Intel emulation on ARM machines and does not indicate a problem. ***\x1b[0;0m`);
+	console.warn(`\x1b[1;33m*** However, this can greatly increase the build time of vs code. ***\x1b[0;0m`);
 }
 
 function hasSupportedVisualStudioVersion() {

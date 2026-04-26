@@ -105,14 +105,10 @@ const tasks = compilations.map(function (tsconfigFile) {
 		headerOut = relativeDirname.substr(index + 1) + '/out';
 	}
 
-	// Create a proper duplex stream that combines input and output
 	function createDuplex(input, output) {
 		const { PassThrough } = require('stream');
-		// Create a wrapper stream that combines input and output
 		const wrapper = new PassThrough({ objectMode: true });
-		// Pipe input to output
 		input.pipe(output);
-		// Forward output data through wrapper
 		output.pipe(wrapper);
 		return wrapper;
 	}

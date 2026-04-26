@@ -8,12 +8,13 @@ Void is a fork of VSCode (Electron-based), serving as the open-source Cursor alt
 
 ## Build Commands
 
-- `npm install` — Install dependencies
+- `npm install` — Install dependencies (Yarn is not supported — use npm install)
 - `npm run watch` — Build and watch client + extensions in dev mode
 - `./scripts/code.bat` (Windows) or `./scripts/code.sh` (Mac/Linux) — Launch Developer Mode window
-- `npm run buildreact` / `npm run watchreact` — Build the Void React bundle
 - `npm run compile` — One-time compile
 - `npm run gulp <target>` — Build specific platform (e.g., `vscode-win32-x64`)
+
+**React build step**: Void uses a separate React bundle. After any React changes, run `npm run buildreact` (or `npm run watchreact` for watch mode). This is required in addition to the standard build commands.
 
 ## Testing Commands
 
@@ -57,7 +58,7 @@ Apply creates **DiffZones** (line range with computed diffs). DiffZones can stre
 - Avoid paths with spaces to prevent build issues
 - For clean dev data: `--user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensions`
 - Press `Ctrl+R` (or `Cmd+R`) in the Dev window to reload changes
-- React changes require running `npm run buildreact` separately
+- Windows: Visual Studio with "Desktop development with C++" workload is required for building
 
 ## Coding Rules (from .voidrules)
 

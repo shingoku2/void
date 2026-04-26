@@ -240,7 +240,7 @@ function cleanNodeModules(rulePath) {
 function loadSourcemaps() {
     const input = through2_1.default.obj();
     const output = input
-        .pipe(through2_1.default.obj(function (f, cb) {
+        .pipe(through2_1.default.obj(function (f, _enc, cb) {
         if (f.sourceMap) {
             cb(undefined, f);
             return;

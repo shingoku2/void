@@ -36,6 +36,27 @@ const { promisify } = require('util');
 const glob = promisify(require('glob'));
 const rcedit = promisify(require('rcedit'));
 
+// Compile .ts resource files in out-build that Electron needs as .js
+const tsResourceFiles = [
+	'vs/base/parts/sandbox/electron-sandbox/preload.ts',
+	'vs/base/parts/sandbox/electron-sandbox/preload-aux.ts',
+];
+const compileTSResourcesTask = task.define('compile-ts-resources', async () => {
+	const esbuild = require('esbuild');
+	for (const relPath of tsResourceFiles) {
+		const tsPath = path.join(root, 'out-build', relPath);
+		const jsPath = tsPath.replace(/\.ts$/, '.js');
+		try {
+			const tsContent = await fs.promises.readFile(tsPath, 'utf-8');
+			const result = await esbuild.transform(tsContent, { loader: 'ts', target: 'es2022' });
+			await fs.promises.writeFile(jsPath, result.code, 'utf-8');
+		} catch (err) {
+			console.warn(`[compile-ts-resources] Could not compile ${relPath}: ${err.message}`);
+		}
+	}
+});
+gulp.task(compileTSResourcesTask);
+
 // Build
 const vscodeEntryPoints = [
 	buildfile.workerEditor,
@@ -141,17 +162,30 @@ const bundleVSCodeTask = task.define('bundle-vscode', task.series(
 					...bootstrapEntryPoints
 				],
 				resources: vscodeResources,
-				fileContentMapper: filePath => {
-					if (
-						filePath.endsWith('vs/code/electron-sandbox/workbench/workbench.js') ||
-						filePath.endsWith('vs/code/electron-sandbox/processExplorer/processExplorer.js')) {
-						return async (content) => {
-							const bootstrapWindowContent = await fs.promises.readFile(path.join(root, 'out-build', 'bootstrap-window.js'), 'utf-8');
-							return `${bootstrapWindowContent}\n${content}`; // prepend bootstrap-window.js content to entry points that are Electron windows
-						};
-					}
-					return undefined;
-				},
+			fileContentMapper: filePath => {
+				const windowEntries = [
+					'vs/code/electron-sandbox/workbench/workbench',
+					'vs/code/electron-sandbox/processExplorer/processExplorer'
+				];
+				const match = windowEntries.some(e => filePath.endsWith(e + '.js') || filePath.endsWith(e + '.ts'));
+				if (match) {
+					return async (content) => {
+						let bootstrapWindowContent;
+						const jsPath = path.join(root, 'out-build', 'bootstrap-window.js');
+						const tsPath = path.join(root, 'out-build', 'bootstrap-window.ts');
+						try {
+							bootstrapWindowContent = await fs.promises.readFile(jsPath, 'utf-8');
+						} catch {
+							const tsContent = await fs.promises.readFile(tsPath, 'utf-8');
+							const esbuildMod = require('esbuild');
+							const result = await esbuildMod.transform(tsContent, { loader: 'ts', target: 'es2022' });
+							bootstrapWindowContent = result.code;
+						}
+						return `${bootstrapWindowContent}\n${content}`;
+					};
+				}
+				return undefined;
+			},
 				skipTSBoilerplateRemoval: entryPoint =>
 					entryPoint === 'vs/code/electron-sandbox/workbench/workbench' ||
 					entryPoint === 'vs/code/electron-sandbox/processExplorer/processExplorer',
@@ -511,6 +545,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 		const vscodeTask = task.define(`vscode${dashed(platform)}${dashed(arch)}${dashed(minified)}`, task.series(
 			minified ? compileBuildWithManglingTask : compileBuildWithoutManglingTask,
+			compileTSResourcesTask,
 			cleanExtensionsBuildTask,
 			compileNonNativeExtensionsBuildTask,
 			compileExtensionMediaBuildTask,

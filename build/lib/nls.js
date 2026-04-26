@@ -48,16 +48,16 @@ function clone(object) {
  */
 function nls(options) {
     let base;
-    const input = (0, through2_1.default)();
+    const input = through2_1.default.obj();
     const output = input
         .pipe((0, gulp_sort_1.default)())
-        .pipe((0, through2_1.default)(function (f) {
-        if (!f.sourceMap) {
-            return this.emit('error', new Error(`File ${f.relative} does not have sourcemaps.`));
+        .pipe(through2_1.default.obj(function (f, _enc, cb) {
+        if (!f.sourceMap || !/\.js$/.test(f.path)) {
+            return cb(null, f);
         }
         let source = f.sourceMap.sources[0];
         if (!source) {
-            return this.emit('error', new Error(`File ${f.relative} does not have a source in the source map.`));
+            return cb(null, f);
         }
         const root = f.sourceMap.sourceRoot;
         if (root) {
@@ -65,11 +65,11 @@ function nls(options) {
         }
         const typescript = f.sourceMap.sourcesContent[0];
         if (!typescript) {
-            return this.emit('error', new Error(`File ${f.relative} does not have the original content in the source map.`));
+            return cb(new Error(`File ${f.relative} does not have the original content in the source map.`));
         }
         base = f.base;
-        this.emit('data', _nls.patchFile(f, typescript, options));
-    }, function () {
+        cb(null, _nls.patchFile(f, typescript, options));
+    }, function (cb) {
         for (const file of [
             new vinyl_1.default({
                 contents: Buffer.from(JSON.stringify({
@@ -98,17 +98,43 @@ globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(_nls.allNLSMessages)};`),
                 path: `${base}/nls.messages.js`
             })
         ]) {
-            this.emit('data', file);
+            this.push(file);
         }
-        this.emit('end');
+        cb();
     }));
     return createDuplex(input, output);
 }
 function createDuplex(input, output) {
-    const passThrough = new stream_1.PassThrough({ objectMode: true });
-    passThrough.pipe(input);
-    output.pipe(passThrough);
-    return passThrough;
+    const { Duplex } = require('stream');
+    const combined = new Duplex({
+        objectMode: true,
+        write(chunk, enc, cb) {
+            if (input.write(chunk, enc)) {
+                cb();
+            } else {
+                input.once('drain', cb);
+            }
+        },
+        final(cb) {
+            input.end();
+            cb();
+        },
+        read() { }
+    });
+    output.on('data', (chunk) => {
+        if (!combined.push(chunk) && typeof output.pause === 'function') {
+            output.pause();
+        }
+    });
+    combined.on('drain', () => {
+        if (typeof output.resume === 'function') {
+            output.resume();
+        }
+    });
+    output.on('end', () => combined.push(null));
+    output.on('error', (err) => combined.destroy(err));
+    input.on('error', (err) => combined.destroy(err));
+    return combined;
 }
 function isImportNode(ts, node) {
     return node.kind === ts.SyntaxKind.ImportDeclaration || node.kind === ts.SyntaxKind.ImportEqualsDeclaration;

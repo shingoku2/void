@@ -242,7 +242,7 @@ export function loadSourcemaps(): NodeJS.ReadWriteStream {
 	const input = through2.obj();
 
 	const output = input
-		.pipe(through2.obj<FileSourceMap, FileSourceMap>(function(f, cb) {
+		.pipe(through2.obj<FileSourceMap, FileSourceMap>(function (f, _enc, cb) {
 			if (f.sourceMap) {
 				cb(undefined, f);
 				return;

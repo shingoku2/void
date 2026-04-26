@@ -23,6 +23,18 @@ import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Electron on Windows: stdout/stderr may be connected to already-closed
+// pipes when launched as a GUI app (not from a terminal). Suppress EPIPE
+// so that console.log/warn/error don't crash the main process.
+for (const stream of [process.stdout, process.stderr]) {
+	stream?.on?.('error', (err: NodeJS.ErrnoException) => {
+		if (err.code === 'EPIPE') {
+			return; // swallow
+		}
+		throw err;
+	});
+}
+
 perf.mark('code/didStartMain');
 
 perf.mark('code/willLoadMainBundle', {

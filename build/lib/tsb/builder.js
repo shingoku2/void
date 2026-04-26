@@ -125,7 +125,7 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
         }
         function emitSoon(fileName) {
             return new Promise(resolve => {
-                process.nextTick(function () {
+                process.nextTick(async function () {
                     if (/\.d\.ts$/.test(fileName)) {
                         // if it's already a d.ts file just emit it signature
                         const snapshot = host.getScriptSnapshot(fileName);
@@ -173,8 +173,8 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
                                 // in step 2 we apply the line edits to the typescript source map
                                 const snapshot = host.getScriptSnapshot(fileName);
                                 if (snapshot instanceof VinylScriptSnapshot && snapshot.sourceMap) {
-                                    const inputSMC = new source_map_1.SourceMapConsumer(snapshot.sourceMap);
-                                    const tsSMC = new source_map_1.SourceMapConsumer(sourceMap);
+                                    const inputSMC = await new source_map_1.SourceMapConsumer(snapshot.sourceMap);
+                                    const tsSMC = await new source_map_1.SourceMapConsumer(sourceMap);
                                     let didChange = false;
                                     const smg = new source_map_1.SourceMapGenerator({
                                         file: sourceMap.file,
@@ -227,12 +227,9 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
                                             });
                                         });
                                         sourceMap = JSON.parse(smg.toString());
-                                        // const filename = '/Users/jrieken/Code/vscode/src2/' + vinyl.relative + '.map';
-                                        // fs.promises.mkdir(path.dirname(filename), { recursive: true }).then(async () => {
-                                        // 	await fs.promises.writeFile(filename, smg.toString());
-                                        // 	await fs.promises.writeFile('/Users/jrieken/Code/vscode/src2/' + vinyl.relative, vinyl.contents);
-                                        // });
                                     }
+                                    inputSMC.destroy();
+                                    tsSMC.destroy();
                                 }
                                 vinyl.sourceMap = sourceMap;
                             }

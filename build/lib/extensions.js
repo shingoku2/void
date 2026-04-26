@@ -499,16 +499,24 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         const output = new stream_1.PassThrough({ objectMode: true });
         let pending = streams.length;
         let failed = false;
+        let ended = false;
+        const endOutput = () => {
+            if (ended || output.writableEnded || output.destroyed) {
+                return;
+            }
+            ended = true;
+            output.end();
+        };
         const fail = (err) => {
             if (failed) {
                 return;
             }
             failed = true;
             output.emit('error', err);
-            output.end();
+            endOutput();
         };
         if (pending === 0) {
-            output.end();
+            endOutput();
             return output;
         }
         for (const stream of streams) {
@@ -524,7 +532,7 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
                 done = true;
                 pending--;
                 if (pending === 0) {
-                    output.end();
+                    endOutput();
                 }
             };
             stream.on('end', onDone);

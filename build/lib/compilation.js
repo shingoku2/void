@@ -99,7 +99,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         const isCSS = (f) => f.path.endsWith('.css') && !f.path.includes('fixtures');
         const noDeclarationsFilter = util.filter(data => !(/\.d\.ts$/.test(data.path)));
         const postcssNesting = require('postcss-nesting');
-        const input = (0, through2_1.default)();
+        const input = (0, through2_1.default)({ objectMode: true });
         const output = input
             .pipe(util.$if(isUtf8Test, bom())) // this is required to preserve BOM in test files that loose it otherwise
             .pipe(util.$if(!build && isRuntimeJs, util.appendOwnPathSourceURL()))
@@ -337,7 +337,17 @@ exports.compileApiProposalNamesTask = task.define('compile-api-proposal-names', 
             .pipe(generateApiProposalNames())
             .pipe(apiProposalNamesReporter.end(true))
             .pipe(gulp_1.default.dest('src'));
-        stream.on('finish', resolve);
+        let settled = false;
+        const done = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            resolve();
+        };
+        stream.on('finish', done);
+        stream.on('end', done);
+        stream.on('close', done);
         stream.on('error', reject);
     });
 });

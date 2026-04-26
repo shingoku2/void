@@ -13,12 +13,42 @@ type VoidModelType = {
 
 export interface IVoidModelService {
 	readonly _serviceBrand: undefined;
-	initializeModel(uri: URI): Promise<void>;
-	getModel(uri: URI): VoidModelType;
-	getModelFromFsPath(fsPath: string): VoidModelType;
-	getModelSafe(uri: URI): Promise<VoidModelType>;
-	saveModel(uri: URI): Promise<void>;
 
+	/**
+	 * Initializes a text model reference for the given URI.
+	 * Idempotent — safe to call multiple times for the same URI.
+	 * @param uri The file URI to initialize
+	 */
+	initializeModel(uri: URI): Promise<void>;
+
+	/**
+	 * Gets the model and editor model reference for a URI.
+	 * @param uri The file URI
+	 * @returns VoidModelType with model (ITextModel) and editorModel (IResolvedTextEditorModel),
+	 *         or null values if not initialized
+	 */
+	getModel(uri: URI): VoidModelType;
+
+	/**
+	 * Gets the model and editor model reference by filesystem path.
+	 * @param fsPath Absolute filesystem path
+	 * @returns Same as getModel(), but accepts fsPath instead of URI
+	 */
+	getModelFromFsPath(fsPath: string): VoidModelType;
+
+	/**
+	 * Gets the model, initializing if necessary.
+	 * Convenience method that awaits initialization before returning.
+	 * @param uri The file URI
+	 */
+	getModelSafe(uri: URI): Promise<VoidModelType>;
+
+	/**
+	 * Saves the model at the given URI.
+	 * Uses skipSaveParticipants to avoid triggering extensions or reformatting.
+	 * @param uri The file URI to save
+	 */
+	saveModel(uri: URI): Promise<void>;
 }
 
 export const IVoidModelService = createDecorator<IVoidModelService>('voidVoidModelService');
