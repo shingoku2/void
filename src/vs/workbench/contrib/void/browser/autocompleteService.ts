@@ -684,19 +684,14 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 		// if there is a cached autocompletion, return it
 		if (cachedAutocompletion && autocompletionMatchup) {
 
-			console.log('AA')
-
-
 			// console.log('id: ' + cachedAutocompletion.id)
 
 			if (cachedAutocompletion.status === 'finished') {
-				console.log('A1')
 
 				const inlineCompletions = toInlineCompletions({ autocompletionMatchup, autocompletion: cachedAutocompletion, prefixAndSuffix, position, debug: true })
 				return inlineCompletions
 
 			} else if (cachedAutocompletion.status === 'pending') {
-				console.log('A2')
 
 				try {
 					await cachedAutocompletion.llmPromise;
@@ -709,9 +704,9 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 				}
 
 			} else if (cachedAutocompletion.status === 'error') {
-				console.log('A3')
+				// Do not log - error status is expected for failed completions
 			} else {
-				console.log('A4')
+				// Do not log - pending status is expected during completion
 			}
 
 			return []
@@ -793,16 +788,13 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 			_newlineCount: 0,
 		}
 
-		console.log('starting autocomplete...', predictionType)
-
-		const featureName: FeatureName = 'Autocomplete'
+		const featureName = 'Autocomplete' as const;
 		const overridesOfModel = this._settingsService.state.overridesOfModel
 		const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
 
 		// set parameters of `newAutocompletion` appropriately
 		newAutocompletion.llmPromise = new Promise((resolve, reject) => {
-
 			const requestId = this._llmMessageService.sendLLMMessage({
 				messagesType: 'FIMMessage',
 				messages: this._convertToLLMMessageService.prepareFIMMessage({
@@ -864,11 +856,17 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 			newAutocompletion.requestId = requestId
 
 			// if the request hasnt resolved in TIMEOUT_TIME seconds, reject it
-			setTimeout(() => {
+			let timeoutHandle: ReturnType<typeof setTimeout>;
+			timeoutHandle = setTimeout(() => {
 				if (newAutocompletion.status === 'pending') {
 					reject('Timeout receiving message to LLM.')
 				}
 			}, TIMEOUT_TIME)
+
+			// Clear the timeout when the promise resolves
+			newAutocompletion.llmPromise
+				.then(() => clearTimeout(timeoutHandle))
+				.catch(() => clearTimeout(timeoutHandle))
 
 		})
 
