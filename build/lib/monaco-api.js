@@ -627,3 +627,4 @@ function execute() {
     }
     return r;
 }
+//# sourceMappingURL=monaco-api.js.map

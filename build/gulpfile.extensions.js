@@ -18,7 +18,8 @@ const { getVersion } = require('./lib/getVersion');
 const task = require('./lib/task');
 const watcher = require('./lib/watch');
 const createReporter = require('./lib/reporter').createReporter;
-const glob = require('glob');
+// glob@10 exports { glob, globSync } - use .glob for async
+const { glob: globAsync } = require('glob');
 const root = path.dirname(__dirname);
 const commit = getVersion(root);
 const plumber = require('gulp-plumber');
@@ -49,7 +50,6 @@ const compilations = [
 	'extensions/jake/tsconfig.json',
 	'extensions/json-language-features/client/tsconfig.json',
 	'extensions/json-language-features/server/tsconfig.json',
-	'extensions/markdown-language-features/preview-src/tsconfig.json',
 	'extensions/markdown-language-features/tsconfig.json',
 	'extensions/markdown-math/tsconfig.json',
 	'extensions/media-preview/tsconfig.json',
@@ -63,7 +63,6 @@ const compilations = [
 	'extensions/search-result/tsconfig.json',
 	'extensions/simple-browser/tsconfig.json',
 	'extensions/tunnel-forwarding/tsconfig.json',
-	'extensions/typescript-language-features/test-workspace/tsconfig.json',
 	'extensions/typescript-language-features/web/tsconfig.json',
 	'extensions/typescript-language-features/tsconfig.json',
 	'extensions/vscode-api-tests/tsconfig.json',
@@ -342,7 +341,7 @@ exports.watchWebExtensionsTask = watchWebExtensionsTask;
  */
 async function buildWebExtensions(isWatch) {
 	const extensionsPath = path.join(root, 'extensions');
-	const webpackConfigLocations = await nodeUtil.promisify(glob)(
+	const webpackConfigLocations = await globAsync(
 		path.join(extensionsPath, '**', 'extension-browser.webpack.config.js'),
 		{ ignore: ['**/node_modules'] }
 	);

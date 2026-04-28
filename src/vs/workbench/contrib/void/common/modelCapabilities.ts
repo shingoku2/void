@@ -76,16 +76,28 @@ export const defaultModelsOfProvider = {
 		'gpt-4.1',
 		'gpt-4.1-mini',
 		'gpt-4.1-nano',
+		'gpt-4o',
+		'gpt-4o-mini',
+		'gpt-4.5',
+		'gpt-4-turbo',
 		'o3',
 		'o4-mini',
-		// 'o1',
-		// 'o1-mini',
-		// 'gpt-4o',
-		// 'gpt-4o-mini',
+		'o1',
+		'o1-mini',
+		'o3-mini',
 	],
 	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models
-		'claude-opus-4-0',
-		'claude-sonnet-4-0',
+		// Claude 4.x family (2025-2026 releases)
+		'claude-opus-4-7',
+		'claude-opus-4-6',
+		'claude-opus-4-5',
+		'claude-opus-4-1',
+		'claude-sonnet-4-6',
+		'claude-sonnet-4-5',
+		'claude-sonnet-4',
+		'claude-haiku-4-5',
+		'claude-mythos',
+		// Legacy 3.x models
 		'claude-3-7-sonnet-latest',
 		'claude-3-5-sonnet-latest',
 		'claude-3-5-haiku-latest',
@@ -108,6 +120,7 @@ export const defaultModelsOfProvider = {
 	deepseek: [ // https://api-docs.deepseek.com/quick_start/pricing
 		'deepseek-chat',
 		'deepseek-reasoner',
+		'deepseek-v3',
 	],
 	ollama: [ // autodetected
 	],
@@ -138,13 +151,24 @@ export const defaultModelsOfProvider = {
 		'qwen-qwq-32b',
 		'llama-3.3-70b-versatile',
 		'llama-3.1-8b-instant',
+		'llama-3.2-3b-instant',
+		'llama-3.2-1b-instant',
 		// 'qwen-2.5-coder-32b', // preview mode (experimental)
 	],
 	mistral: [ // https://docs.mistral.ai/getting-started/models/models_overview/
+		// March 2026 releases
+		'mistral-small-4',
+		'mistral-large-3',
+		'devstral-2',
+		'mistral-medium-3.1',
+		'ministral-3-14b',
+		'ministral-3-8b',
+		'ministral-3-3b',
+		// Legacy models
 		'codestral-latest',
 		'devstral-small-latest',
-		'mistral-large-latest',
-		'mistral-medium-latest',
+		'magistral-medium-latest',
+		'magistral-small-latest',
 		'ministral-3b-latest',
 		'ministral-8b-latest',
 	],
@@ -494,6 +518,144 @@ const anthropicModelOptions = {
 		},
 
 	},
+	'claude-mythos': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 30.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-haiku-4-5': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.80, cache_read: 0.08, cache_write: 1.00, output: 4.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: false,
+	},
+	'claude-opus-4-7': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 30.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-opus-4-6': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 30.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-opus-4-5': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 30.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-opus-4-1': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 30.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-sonnet-4-6': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 6.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-sonnet-4-5': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 6.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
+	'claude-sonnet-4': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 6.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+		},
+	},
 	'claude-opus-4-20250514': {
 		contextWindow: 200_000,
 		reservedOutputTokenSpace: 8_192,
@@ -586,10 +748,19 @@ const anthropicSettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof anthropicModelOptions | null = null
-		if (lower.includes('claude-4-opus') || lower.includes('claude-opus-4')) fallbackName = 'claude-opus-4-20250514'
-		if (lower.includes('claude-4-sonnet') || lower.includes('claude-sonnet-4')) fallbackName = 'claude-sonnet-4-20250514'
-
-
+		// Handle new naming convention: claude-opus-4-7, claude-sonnet-4-6, etc.
+		if (lower.includes('claude-opus-4-7')) fallbackName = 'claude-opus-4-7'
+		if (lower.includes('claude-opus-4-6')) fallbackName = 'claude-opus-4-6'
+		if (lower.includes('claude-opus-4-5') && !lower.includes('claude-opus-4-50')) fallbackName = 'claude-opus-4-5'
+		if (lower.includes('claude-opus-4-1')) fallbackName = 'claude-opus-4-1'
+		if (lower.includes('claude-sonnet-4-6')) fallbackName = 'claude-sonnet-4-6'
+		if (lower.includes('claude-sonnet-4-5')) fallbackName = 'claude-sonnet-4-5'
+		if (lower.includes('claude-sonnet-4') && !lower.includes('-4-')) fallbackName = 'claude-sonnet-4'
+		if (lower.includes('claude-haiku-4-5')) fallbackName = 'claude-haiku-4-5'
+		if (lower.includes('claude-mythos')) fallbackName = 'claude-mythos'
+		// Legacy date-based models (still supported)
+		if (lower.includes('claude-opus-4-20250514')) fallbackName = 'claude-opus-4-20250514'
+		if (lower.includes('claude-sonnet-4-20250514')) fallbackName = 'claude-sonnet-4-20250514'
 		if (lower.includes('claude-3-7-sonnet')) fallbackName = 'claude-3-7-sonnet-20250219'
 		if (lower.includes('claude-3-5-sonnet')) fallbackName = 'claude-3-5-sonnet-20241022'
 		if (lower.includes('claude-3-5-haiku')) fallbackName = 'claude-3-5-haiku-20241022'
@@ -681,15 +852,6 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: false,
 	},
-	'o1-mini': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: 65_536,
-		cost: { input: 1.10, cache_read: 0.55, output: 4.40, },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: false, // does not support any system
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
-	},
 	'gpt-4o-mini': {
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 16_384,
@@ -699,6 +861,35 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'system-role', // ??
 		reasoningCapabilities: false,
+	},
+	'gpt-4.5': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 3.00, cache_read: 1.50, output: 12.00, },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'gpt-4-turbo': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 10.00, cache_read: 1.25, output: 15.00, },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'o1-mini': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 65_536,
+		cost: { input: 1.10, cache_read: 0.55, output: 4.40, },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: false, // does not support any system
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
@@ -719,8 +910,17 @@ const openAISettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
 		if (lower.includes('o1')) { fallbackName = 'o1' }
+		if (lower.includes('o1-mini')) { fallbackName = 'o1-mini' }
 		if (lower.includes('o3-mini')) { fallbackName = 'o3-mini' }
+		if (lower.includes('o3')) { fallbackName = 'o3' }
+		if (lower.includes('o4-mini')) { fallbackName = 'o4-mini' }
+		if (lower.includes('gpt-4o-mini')) { fallbackName = 'gpt-4o-mini' }
 		if (lower.includes('gpt-4o')) { fallbackName = 'gpt-4o' }
+		if (lower.includes('gpt-4.5')) { fallbackName = 'gpt-4.5' }
+		if (lower.includes('gpt-4-turbo')) { fallbackName = 'gpt-4-turbo' }
+		if (lower.includes('gpt-4.1-mini')) { fallbackName = 'gpt-4.1-mini' }
+		if (lower.includes('gpt-4.1-nano')) { fallbackName = 'gpt-4.1-nano' }
+		if (lower.includes('gpt-4.1')) { fallbackName = 'gpt-4.1' }
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...openAIModelOptions[fallbackName] }
 		return null
 	},
@@ -875,6 +1075,16 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: false,
 	},
+	'gemini-2.0-pro': {
+		contextWindow: 1_048_576,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 1.25, output: 5.00 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'separated',
+		specialToolFormat: 'gemini-style',
+		reasoningCapabilities: false,
+	},
 	'gemini-2.0-flash-lite-preview-02-05': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 8_192, // 8_192,
@@ -940,6 +1150,13 @@ const deepseekModelOptions = {
 		cost: { cache_read: .14, input: .55, output: 2.19, },
 		downloadable: false,
 	},
+	'deepseek-v3': {
+		...openSourceModelOptions_assumingOAICompat.deepseekCoderV3,
+		contextWindow: 64_000,
+		reservedOutputTokenSpace: 8_000,
+		cost: { cache_read: .14, input: .55, output: 2.19, },
+		downloadable: false,
+	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
 
@@ -958,6 +1175,71 @@ const deepseekSettings: VoidStaticProviderInfo = {
 // ---------------- MISTRAL ----------------
 
 const mistralModelOptions = { // https://mistral.ai/products/la-plateforme#pricing https://docs.mistral.ai/getting-started/models/models_overview/#premier-models
+	// March 2026 releases
+	'mistral-small-4': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.00 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', ''] },
+	},
+	'mistral-large-3': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 2.00, output: 6.00 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 73 },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'devstral-2': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'mistral-medium-3.1': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.40, output: 2.00 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'ministral-3-14b': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 4_096,
+		cost: { input: 0.10, output: 0.10 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'ministral-3-8b': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 4_096,
+		cost: { input: 0.10, output: 0.10 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'ministral-3-3b': {
+		contextWindow: 131_000,
+		reservedOutputTokenSpace: 4_096,
+		cost: { input: 0.04, output: 0.04 },
+		supportsFIM: false,
+		downloadable: { sizeGb: 'not-known' },
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	// Legacy models
 	'mistral-large-latest': {
 		contextWindow: 131_000,
 		reservedOutputTokenSpace: 8_192,
@@ -1053,6 +1335,24 @@ const groqModelOptions = { // https://console.groq.com/docs/models, https://groq
 		reasoningCapabilities: false,
 	},
 	'llama-3.1-8b-instant': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.05, output: 0.08 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'llama-3.2-3b-instant': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.05, output: 0.08 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'llama-3.2-1b-instant': {
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 8_192,
 		cost: { input: 0.05, output: 0.08 },

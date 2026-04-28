@@ -18,6 +18,7 @@ import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MCPUserStateOfName } from '../common/voidSettingsTypes.js';
 import { isWindows } from '../../../../base/common/platform.js';
+import { randomUUID } from 'crypto';
 
 // ============================================================================
 // Command Path Validation (Security: prevent arbitrary command execution)
@@ -59,7 +60,8 @@ function validateCommandPath(command: string): { valid: boolean; reason?: string
 	}
 
 	// Check for shell metacharacters that could be used for injection
-	const suspiciousChars = /[;&|`$]/;
+	// Expanded to include: ! > < \ ( ) and compound operators && ||
+	const suspiciousChars = /[;&|`$<>!\\()]|&&|\|\|/;
 	if (suspiciousChars.test(command)) {
 		return { valid: false, reason: 'Suspicious shell metacharacters in command' };
 	}
@@ -287,6 +289,8 @@ export class MCPChannel implements IServerChannel {
 						await transport.close()
 					} catch (closeErr) {
 						console.warn(`Error closing failed HTTP transport for ${serverName}:`, closeErr)
+						// Track failed close - surface to caller since resource cleanup failed
+						throw new Error(`Failed to close HTTP transport for ${serverName}: ${closeErr}`);
 					}
 				}
 				console.warn(`HTTP failed for ${serverName}, trying SSE…`, httpErr);
@@ -309,6 +313,21 @@ export class MCPChannel implements IServerChannel {
 				console.error(`❌ Security: ${error.message}`);
 				throw error;
 			}
+
+			// Validate args to prevent command injection via arguments
+			// Reject args containing shell metacharacters that could enable command injection
+			if (server.args && Array.isArray(server.args)) {
+				const dangerousArgPattern = /^[;&|`$()<>!\\]|[\x00-\x1f]/;
+				for (const arg of server.args) {
+					if (typeof arg !== 'string') continue;
+					if (dangerousArgPattern.test(arg)) {
+						const error = new Error(`Security: Command argument contains dangerous characters: "${arg}"`);
+						console.error(`❌ Security: ${error.message}`);
+						throw error;
+					}
+				}
+			}
+
 			console.warn(`⚠️ MCP: Using stdio transport with command: ${server.command}`);
 
 			// console.log('ENV DATA: ', server.env)
@@ -317,7 +336,9 @@ export class MCPChannel implements IServerChannel {
 				args: server.args,
 				env: {
 					...server.env,
-					...process.env
+					PATH: process.env.PATH,
+					HOME: process.env.HOME,
+					USER: process.env.USER,
 				} as Record<string, string>,
 			});
 
@@ -346,7 +367,7 @@ export class MCPChannel implements IServerChannel {
 	}
 
 	private _addUniquePrefix(base: string) {
-		return `${Math.random().toString(36).slice(2, 8)}_${base}`;
+		return `${randomUUID()}_${base}`;
 	}
 
 	private async _createClient(serverConfig: MCPConfigFileEntryJSON, serverName: string, isOn = true): Promise<ClientInfo> {

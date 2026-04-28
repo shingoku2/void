@@ -49,5 +49,7 @@ process.on('unhandledRejection', (reason, p) => {
 });
 
 // Load all the gulpfiles only if running tasks other than the editor tasks
-require('glob').sync('gulpfile.*.js', { cwd: __dirname })
+const fs = require('fs');
+fs.readdirSync(__dirname)
+	.filter(f => /^gulpfile\..+\.js$/.test(f))
 	.forEach(f => require(`./${f}`));

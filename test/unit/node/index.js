@@ -12,7 +12,7 @@ import * as assert from 'assert';
 import Mocha from 'mocha';
 import * as path from 'path';
 import * as fs from 'fs';
-import glob from 'glob';
+import { glob } from 'glob';
 import { minimatch } from 'minimatch';
 import minimist from 'minimist';
 import * as module from 'module';

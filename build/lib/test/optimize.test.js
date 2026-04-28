@@ -137,3 +137,4 @@ const opts = {
     src: '/src',
     resources: []
 };
+//# sourceMappingURL=optimize.test.js.map

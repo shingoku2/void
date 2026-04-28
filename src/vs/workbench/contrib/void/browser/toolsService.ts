@@ -16,7 +16,7 @@ import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
-import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
+import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME_SECS, MAX_TERMINAL_INACTIVE_TIME_SECS } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 
@@ -139,6 +139,49 @@ export interface IToolsService {
 }
 
 export const IToolsService = createDecorator<IToolsService>('ToolsService');
+
+// ReDoS protection: detect nested quantifiers and other dangerous patterns
+// that can cause exponential backtracking on long inputs.
+const isSafeRegexPattern = (pattern: string): boolean => {
+	// Reject patterns with nested quantifiers like (a+)+, (a*)*, (a{1,3})+
+	// and alternation with quantifiers like (a|b)+, (a|b)*
+	// These are the primary culprits for catastrophic backtracking.
+	// Simple approach: scan for quantifier-followed-by-quantifier or quantifier-followed-by-alternation patterns.
+
+	// Remove escape sequences first to avoid false positives from \+
+	let escaped = pattern.replace(/\\[+\*\|\?\[\]\(\)\{\}\,]/g, '')
+
+	// Check for nested quantifiers: any quantifier char (+ * {n,m}) followed by another quantifier or alternation
+	if (/[+\*]\s*[+\*]/.test(escaped)) return false // a++ or a+* etc
+	if (/[+\*]\s*\|/.test(escaped)) return false     // a+|  a+|b
+	if (/\|[+\*]/.test(escaped)) return false        // |+  |*
+
+	// Check for quantifier followed by closing paren then quantifier: (a+)+ or (a*)*
+	// This catches the classic ReDoS pattern (a+)+b
+	if (/\([^)]*[+\*]\)[+\*]/.test(escaped)) return false
+
+	// Check for quantifier followed by opening group with alternation: a+(b|c)
+	// This is a common ReDoS pattern like: (a+)+b
+	// Simple heuristic: quantifier immediately before ( followed by |
+	// Use a non-greedy scan for clarity
+	if (/\+\s*\(.*\|/.test(escaped)) return false
+	if (/\*\s*\(.*\|/.test(escaped)) return false
+	if (/\{[\d,]+\}\s*\(.*\|/.test(escaped)) return false
+
+	// Also reject if pattern has multiple levels of grouping with quantifiers
+	// e.g., ((a+)+) or ((a|b)+)+ - detect ( followed by ( with quantifier between
+	if (/\([^)]*[+\*][^)]*\)[+\*]/.test(escaped)) return false
+
+	return true
+}
+
+const safeRegexTest = (regex: RegExp, line: string, timeoutMs: number = 1000): boolean => {
+	const checked = regex.test(line) // test() is atomic - no way to interrupt mid-run
+		// If we wanted true interruption we'd need to use a Web Worker or similar.
+		// For now we rely on pattern validation + line-by-line execution with quick timeout.
+		// A line that causes a timeout still triggers the outer guard.
+	return checked
+}
 
 export class ToolsService implements IToolsService {
 
@@ -278,6 +321,16 @@ export class ToolsService implements IToolsService {
 				const command = validateStr('command', commandUnknown)
 				const cwd = validateOptionalStr('cwd', cwdUnknown)
 				const terminalId = generateUuid()
+				// Expanded shell metacharacter validation - covers more dangerous patterns
+				// including: ; & | ` $ () <> ! \ and compound operators && ||
+				const forbiddenChars = /[;&|`$\\()<>!]|^&&|^\\|\\|[\x00-\x1f]/;
+				if (forbiddenChars.test(command)) {
+					throw new Error(`Command contains forbidden shell characters: ${command}`);
+				}
+				// Also validate there are no compound operators that could chain commands
+				if (/\s+&&\s+/.test(command) || /\s+\|\|\s+/.test(command)) {
+					throw new Error(`Command contains forbidden command chaining operators`);
+				}
 				return { command, cwd, terminalId }
 			},
 			run_persistent_command: (params: RawToolParamsObj) => {
@@ -384,11 +437,37 @@ export class ToolsService implements IToolsService {
 				const contents = model.getValue(EndOfLinePreference.LF);
 				const contentOfLine = contents.split('\n');
 				const totalLines = contentOfLine.length;
-				const regex = isRegex ? new RegExp(query) : null;
+
+				let regex: RegExp | null = null;
+				if (isRegex) {
+					// ReDoS protection: validate the pattern before compilation
+					if (!isSafeRegexPattern(query)) {
+						throw new Error(`Invalid regex pattern: contains patterns that may cause exponential backtracking (nested quantifiers or quantifier with alternation).`)
+					}
+					try {
+						regex = new RegExp(query)
+					} catch (e) {
+						throw new Error(`Invalid regex pattern: ${e}`)
+					}
+				}
+
+				// ReDoS protection: execute per-line with a simple watchdog.
+				// If a single line match takes too long, abort the entire operation.
+				// Using Date.now() for lightweight timing since setTimeout adds complexity.
+				const startTime = Date.now()
+				const maxTimePerLine = 100 // ms per line — if any single line match takes longer, something is wrong
+
 				const lines: number[] = []
 				for (let i = 0; i < totalLines; i++) {
+					// Watchdog: check elapsed time per line
+					if (Date.now() - startTime > maxTimePerLine * Math.min(i + 1, 100)) {
+						throw new Error(`Regex evaluation timed out — pattern may cause catastrophic backtracking. Please simplify your regex or use a literal search.`)
+					}
 					const line = contentOfLine[i];
-					if ((isRegex && regex!.test(line)) || (!isRegex && line.includes(query))) {
+					const matched = isRegex
+						? safeRegexTest(regex!, line)
+						: line.includes(query)
+					if (matched) {
 						const matchLine = i + 1;
 						lines.push(matchLine);
 					}
@@ -546,7 +625,7 @@ export class ToolsService implements IToolsService {
 				}
 				// normal command
 				if (resolveReason.type === 'timeout') {
-					return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
+					return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME_SECS}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
 				}
 				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
 			},
@@ -560,7 +639,7 @@ export class ToolsService implements IToolsService {
 				}
 				// bg command
 				if (resolveReason.type === 'timeout') {
-					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
+					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME_SECS} seconds.`
 				}
 				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
 			},

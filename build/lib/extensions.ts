@@ -6,7 +6,8 @@
 import { PassThrough, Transform } from 'stream';
 import fs from 'fs';
 import cp from 'child_process';
-import glob from 'glob';
+// glob@10 - import named export for sync
+import { sync as globSync } from 'glob';
 import gulp from 'gulp';
 import path from 'path';
 import crypto from 'crypto';
@@ -19,7 +20,7 @@ import filter from 'gulp-filter';
 import rename from 'gulp-rename';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
-import buffer from 'gulp-buffer';
+// gulp-buffer removed - vinyl files are already in buffer mode in this pipeline
 import * as jsoncParser from 'jsonc-parser';
 import webpack from 'webpack';
 import { getProductionDependencies } from './dependencies';
@@ -131,7 +132,6 @@ function minifyExtensionResources(input: Stream): Stream {
 	const jsonFilter = filter(['**/*.json', '**/*.code-snippets'], { restore: true });
 	return input
 		.pipe(jsonFilter)
-		.pipe(buffer())
 		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const errors: jsoncParser.ParseError[] = [];
 			const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
@@ -148,7 +148,6 @@ function updateExtensionPackageJSON(input: Stream, update: (data: any) => any): 
 	const packageJsonFilter = filter('extensions/*/package.json', { restore: true });
 	return input
 		.pipe(packageJsonFilter)
-		.pipe(buffer())
 		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const data = JSON.parse(f.contents.toString('utf8'));
 			f.contents = Buffer.from(JSON.stringify(update(data)));
@@ -215,7 +214,7 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 
 		// check for a webpack configuration files, then invoke webpack
 		// and merge its output with the files stream.
-		const webpackConfigLocations = (<string[]>glob.sync(
+		const webpackConfigLocations = (<string[]>globSync(
 			path.join(extensionPath, '**', webpackConfigFileName),
 			{ ignore: ['**/node_modules'] }
 		));
@@ -362,7 +361,6 @@ export function fromMarketplace(serviceUrl: string, { name: extensionName, versi
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
-		.pipe(buffer())
 		.pipe(json({ __metadata: metadata }))
 		.pipe(packageJsonFilter.restore);
 }
@@ -375,7 +373,6 @@ export function fromVsix(vsixPath: string, { name: extensionName, version, sha25
 	const packageJsonFilter = filter('package.json', { restore: true });
 
 	return gulp.src(vsixPath)
-		.pipe(buffer())
 		.pipe(through2.obj((f: File, _encoding, callback) => {
 			const hash = crypto.createHash('sha256');
 			hash.update(f.contents as Buffer);
@@ -390,7 +387,6 @@ export function fromVsix(vsixPath: string, { name: extensionName, version, sha25
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
-		.pipe(buffer())
 		.pipe(json({ __metadata: metadata }))
 		.pipe(packageJsonFilter.restore);
 }
@@ -408,12 +404,10 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
 		name: name => name.endsWith('.vsix'),
 		checksumSha256: sha256
 	})
-		.pipe(buffer())
 		.pipe(extractVsix())
 		.pipe(filter('extension/**'))
 		.pipe(rename(p => p.dirname = p.dirname!.replace(/^extension\/?/, '')))
 		.pipe(packageJsonFilter)
-		.pipe(buffer())
 		.pipe(json({ __metadata: metadata }))
 		.pipe(packageJsonFilter.restore);
 }
@@ -577,7 +571,7 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 
 	const nativeExtensionsSet = new Set(nativeExtensions);
 	const localExtensionsDescriptions = (
-		(<string[]>glob.sync('extensions/*/package.json'))
+		(<string[]>globSync('extensions/*/package.json'))
 			.map(manifestPath => {
 				const absoluteManifestPath = path.join(root, manifestPath);
 				const extensionPath = path.dirname(path.join(root, manifestPath));

@@ -22,10 +22,13 @@ const { readISODate } = require('./lib/date');
 const vfs = require('vinyl-fs');
 const packageJson = require('../package.json');
 const flatmap = require('gulp-flatmap');
-const gunzip = require('gulp-gunzip');
+const zlib = require('zlib');
+const tar = require('tar');
+const through2 = require('through2');
 const File = require('vinyl');
 const fs = require('fs');
-const glob = require('glob');
+// glob@10 exports { glob, globSync } - use .sync for sync
+const { sync: globSync } = require('glob');
 const { compileBuildWithManglingTask } = require('./gulpfile.compile');
 const { cleanExtensionsBuildTask, compileNonNativeExtensionsBuildTask, compileNativeExtensionsBuildTask, compileExtensionMediaBuildTask } = require('./gulpfile.extensions');
 const { vscodeWebResourceIncludes, createVSCodeWebFileContentMapper } = require('./gulpfile.vscode.web');
@@ -185,7 +188,50 @@ if (defaultNodeTask) {
 
 function nodejs(platform, arch) {
 	const { fetchUrls, fetchGithub } = require('./lib/fetch');
-	const untar = require('gulp-untar');
+
+	// Custom transform: gulp-untar + gunzip replacement using native Node.js
+	function createTgzExtract() {
+		return through2.obj({ highWaterMark: 1 }, function (file, encoding, callback) {
+			if (file.isNull()) {
+				this.push(file);
+				callback();
+				return;
+			}
+
+			const chunks = [];
+			const gunzipStream = zlib.createGunzip();
+			const extractStream = tar.extract();
+
+			file.contents.pipe(gunzipStream);
+
+			extractStream.on('entry', (header, stream, next) => {
+				const entryChunks = [];
+				stream.on('data', chunk => entryChunks.push(chunk));
+				stream.on('end', () => {
+					const contents = Buffer.concat(entryChunks);
+					const entryFile = new File({
+						cwd: file.cwd,
+						base: file.base,
+						path: path.join(file.base || '', header.name),
+						contents
+					});
+					this.push(entryFile);
+					next();
+				});
+				stream.resume();
+			});
+
+			extractStream.on('end', () => {
+				callback();
+			});
+
+			extractStream.on('error', err => {
+				callback(err);
+			});
+
+			gunzipStream.pipe(extractStream);
+		});
+	}
 
 	if (arch === 'armhf') {
 		arch = 'armv7l';
@@ -233,14 +279,14 @@ function nodejs(platform, arch) {
 			return (product.nodejsRepository !== 'https://nodejs.org' ?
 				fetchGithub(product.nodejsRepository, { version: `${nodeVersion}-${internalNodeVersion}`, name: expectedName, checksumSha256 }) :
 				fetchUrls(`/dist/v${nodeVersion}/node-v${nodeVersion}-${platform}-${arch}.tar.gz`, { base: 'https://nodejs.org', checksumSha256 })
-			).pipe(flatmap(stream => stream.pipe(gunzip()).pipe(untar())))
+			).pipe(flatmap(stream => stream.pipe(createTgzExtract())))
 				.pipe(filter('**/node'))
 				.pipe(util.setExecutableBit('**'))
 				.pipe(rename('node'));
 		case 'alpine':
 			return product.nodejsRepository !== 'https://nodejs.org' ?
 				fetchGithub(product.nodejsRepository, { version: `${nodeVersion}-${internalNodeVersion}`, name: expectedName, checksumSha256 })
-					.pipe(flatmap(stream => stream.pipe(gunzip()).pipe(untar())))
+					.pipe(flatmap(stream => stream.pipe(createTgzExtract())))
 					.pipe(filter('**/node'))
 					.pipe(util.setExecutableBit('**'))
 					.pipe(rename('node'))
@@ -276,7 +322,7 @@ function packageTask(type, platform, arch, sourceFolderName, destinationFolderNa
 				}
 			}
 		};
-		const localWorkspaceExtensions = glob.sync('extensions/*/package.json')
+		const localWorkspaceExtensions = globSync('extensions/*/package.json')
 			.filter((extensionPath) => {
 				if (type === 'reh-web') {
 					return true; // web: ship all extensions for now

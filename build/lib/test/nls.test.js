@@ -268,3 +268,4 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
         combined.end();
     });
 });
+//# sourceMappingURL=nls.test.js.map

@@ -9,7 +9,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.nls = nls;
 const lazy_js_1 = __importDefault(require("lazy.js"));
-const stream_1 = require("stream");
 const through2_1 = __importDefault(require("through2"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const source_map_1 = __importDefault(require("source-map"));
@@ -111,7 +110,8 @@ function createDuplex(input, output) {
         write(chunk, enc, cb) {
             if (input.write(chunk, enc)) {
                 cb();
-            } else {
+            }
+            else {
                 input.once('drain', cb);
             }
         },
@@ -441,3 +441,4 @@ var _nls;
     }
     _nls.patchFile = patchFile;
 })(_nls || (_nls = {}));
+//# sourceMappingURL=nls.js.map

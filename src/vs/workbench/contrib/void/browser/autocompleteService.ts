@@ -67,7 +67,7 @@ Details
 */
 
 class LRUCache<K, V> {
-	public items: Map<K, V>;
+	public items: bOfAKV;
 	private keyOrder: K[];
 	private maxSize: number;
 	private disposeCallback?: (value: V, key?: K) => void;
@@ -82,9 +82,15 @@ class LRUCache<K, V> {
 	}
 
 	set(key: K, value: V): void {
-		// If key exists, remove it from the order list
+		// If key exists, dispose old value and remove from order list
 		if (this.items.has(key)) {
+			const oldValue = this.items.get(key);
+			// Call dispose callback for the evicted old value
+			if (this.disposeCallback && oldValue !== undefined) {
+				this.disposeCallback(oldValue, key);
+			}
 			this.keyOrder = this.keyOrder.filter(k => k !== key);
+			this.items.delete(key);
 		}
 		// If cache is full, remove least recently used item
 		else if (this.items.size >= this.maxSize) {

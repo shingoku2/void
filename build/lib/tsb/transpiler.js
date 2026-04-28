@@ -54,10 +54,15 @@ class OutputFileNameOracle {
                 const isDts = file.endsWith('.d.ts');
                 if (isDts) {
                     file = file.slice(0, -5) + '.ts';
+                }
+                // Always ensure the file is in cmdLine.fileNames for getOutputFileNames to work correctly
+                const idx = cmdLine.fileNames.indexOf(file);
+                const needsRestore = idx === -1;
+                if (needsRestore) {
                     cmdLine.fileNames.push(file);
                 }
                 const outfile = typescript_1.default.getOutputFileNames(cmdLine, file, true)[0];
-                if (isDts) {
+                if (needsRestore) {
                     cmdLine.fileNames.pop();
                 }
                 return outfile;
@@ -94,6 +99,12 @@ class TranspileWorker {
                     diagnostics.push(...fileDiagnostics);
                     continue;
                 }
+                let SuffixTypes;
+                (function (SuffixTypes) {
+                    SuffixTypes[SuffixTypes["Dts"] = 5] = "Dts";
+                    SuffixTypes[SuffixTypes["Ts"] = 3] = "Ts";
+                    SuffixTypes[SuffixTypes["Unknown"] = 0] = "Unknown";
+                })(SuffixTypes || (SuffixTypes = {}));
                 const suffixLen = file.path.endsWith('.d.ts') ? 5 /* SuffixTypes.Dts */
                     : file.path.endsWith('.ts') ? 3 /* SuffixTypes.Ts */
                         : 0 /* SuffixTypes.Unknown */;
@@ -297,3 +308,4 @@ function _isDefaultEmpty(src) {
         .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1')
         .trim().length === 0;
 }
+//# sourceMappingURL=transpiler.js.map

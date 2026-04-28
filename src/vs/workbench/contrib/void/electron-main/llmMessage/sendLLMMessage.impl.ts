@@ -56,6 +56,11 @@ export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>
 
 const invalidApiKeyMessage = (providerName: ProviderName) => `Invalid ${displayInfoOfProviderName(providerName).title} API key.`
 
+// Default timeout for LLM streaming requests (120 seconds).
+// This protects against hung connections and gives LLMs time to generate long responses.
+const DEFAULT_LLM_STREAM_TIMEOUT_MS = 120_000
+
+
 // ------------ OPENAI-COMPATIBLE (HELPERS) ------------
 
 
@@ -203,7 +208,7 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 		})
 		.catch(error => {
 			if (error instanceof OpenAI.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }); }
-			else { onError({ message: error + '', fullError: error }); }
+			else { onError({ message: error?.message ?? String(error), fullError: error }); }
 		})
 }
 
@@ -333,57 +338,71 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	let toolId = ''
 	let toolParamsStr = ''
 
-	openai.chat.completions
-		.create(options)
-		.then(async response => {
-			_setAborter(() => response.controller.abort())
-			// when receive text
-			for await (const chunk of response) {
-				// message
-				const newText = chunk.choices[0]?.delta?.content ?? ''
-				fullTextSoFar += newText
+	// Wrap the entire streaming call in Promise.race with a timeout.
+	// This ensures the request completes or is rejected within DEFAULT_LLM_STREAM_TIMEOUT_MS.
+	const requestPromise = (async () => {
+		const response = await openai.chat.completions.create(options)
+		_setAborter(() => response.controller.abort())
 
-				// tool call
-				for (const tool of chunk.choices[0]?.delta?.tool_calls ?? []) {
-					const index = tool.index
-					if (index !== 0) continue
+		let fullReasoningSoFar = ''
+		let fullTextSoFar = ''
 
-					toolName += tool.function?.name ?? ''
-					toolParamsStr += tool.function?.arguments ?? '';
-					toolId += tool.id ?? ''
-				}
+		let toolName = ''
+		let toolId = ''
+		let toolParamsStr = ''
 
+		// when receive text
+		for await (const chunk of response) {
+			// message
+			const newText = chunk.choices[0]?.delta?.content ?? ''
+			fullTextSoFar += newText
 
-				// reasoning
-				let newReasoning = ''
-				if (nameOfReasoningFieldInDelta) {
-					// @ts-ignore
-					newReasoning = (chunk.choices[0]?.delta?.[nameOfReasoningFieldInDelta] || '') + ''
-					fullReasoningSoFar += newReasoning
-				}
+			// tool call
+			for (const tool of chunk.choices[0]?.delta?.tool_calls ?? []) {
+				const index = tool.index
+				if (index !== 0) continue
 
-				// call onText
-				onText({
-					fullText: fullTextSoFar,
-					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
-				})
-
+				toolName += tool.function?.name ?? ''
+				toolParamsStr += tool.function?.arguments ?? '';
+				toolId += tool.id ?? ''
 			}
-			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
-				onError({ message: 'Void: Response from model was empty.', fullError: null })
+
+
+			// reasoning
+			let newReasoning = ''
+			if (nameOfReasoningFieldInDelta) {
+				// @ts-ignore
+				newReasoning = (chunk.choices[0]?.delta?.[nameOfReasoningFieldInDelta] || '') + ''
+				fullReasoningSoFar += newReasoning
 			}
-			else {
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
-			}
-		})
-		// when error/fail - this catches errors of both .create() and .then(for await)
+
+			// call onText
+			onText({
+				fullText: fullTextSoFar,
+				fullReasoning: fullReasoningSoFar,
+				toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+			})
+
+		}
+		// on final
+		if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			onError({ message: 'Void: Response from model was empty.', fullError: null })
+		}
+		else {
+			const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
+			const toolCallObj = toolCall ? { toolCall } : {}
+			onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
+		}
+	})()
+
+	// Race the request against a timeout
+	Promise.race([requestPromise, new Promise((_, reject) => setTimeout(() => reject(new Error(`LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`)), DEFAULT_LLM_STREAM_TIMEOUT_MS))])
 		.catch(error => {
 			if (error instanceof OpenAI.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }); }
+			else if (error.message?.includes('timed out')) { onError({ message: error.message, fullError: error }); }
 			else { onError({ message: error + '', fullError: error }); }
+			// Re-throw so caller can handle the rejection
+			throw error;
 		})
 }
 
@@ -573,9 +592,22 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 	// on error
 	stream.on('error', (error) => {
 		if (error instanceof Anthropic.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }) }
-		else { onError({ message: error + '', fullError: error }) }
+		else { onError({ message: error?.message ?? String(error), fullError: error }) }
 	})
 	_setAborter(() => stream.controller.abort())
+
+	// Timeout wrapper: if the stream doesn't complete within DEFAULT_LLM_STREAM_TIMEOUT_MS, abort and error
+	let timedOut = false
+	const timeoutHandle = setTimeout(() => {
+		timedOut = true
+		clearTimeout(timeoutHandle) // Clear ourselves to prevent double-fire
+		stream.controller.abort()
+		onError({ message: `LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`, fullError: new Error(`Anthropic stream timeout`) })
+	}, DEFAULT_LLM_STREAM_TIMEOUT_MS)
+
+	// Ensure the timeout handle is cleared if the stream finishes normally before the timeout fires
+	stream.on('finalMessage', () => { clearTimeout(timeoutHandle) })
+	stream.on('error', () => { if (!timedOut) clearTimeout(timeoutHandle) })
 }
 
 
@@ -800,6 +832,14 @@ const sendGeminiChat = async ({
 	let toolParamsStr = ''
 	let toolId = ''
 
+	// Wrap streaming in a timeout
+	let timedOut = false
+	const timeoutHandle = setTimeout(() => {
+		timedOut = true
+		// Abort the stream if possible
+		try { genAI.abort?.() } catch (_) { /* ignore */ }
+		onError({ message: `LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`, fullError: new Error(`Gemini stream timeout`) })
+	}, DEFAULT_LLM_STREAM_TIMEOUT_MS)
 
 	genAI.models.generateContentStream({
 		model: modelName,
@@ -811,10 +851,11 @@ const sendGeminiChat = async ({
 		contents: messages as GeminiLLMChatMessage[],
 	})
 		.then(async (stream) => {
-			_setAborter(() => { stream.return(fullTextSoFar); });
+			_setAborter(() => { try { stream.return?.(fullTextSoFar) } catch (_) { /* ignore */ } });
 
 			// Process the stream
 			for await (const chunk of stream) {
+				if (timedOut) break
 				// message
 				const newText = chunk.text ?? ''
 				fullTextSoFar += newText
@@ -838,6 +879,8 @@ const sendGeminiChat = async ({
 				})
 			}
 
+			clearTimeout(timeoutHandle)
+
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
@@ -849,6 +892,7 @@ const sendGeminiChat = async ({
 			}
 		})
 		.catch(error => {
+			if (!timedOut) clearTimeout(timeoutHandle)
 			const message = error?.message
 			if (typeof message === 'string') {
 

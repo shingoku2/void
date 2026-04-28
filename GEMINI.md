@@ -3,7 +3,7 @@
 ## Project Overview
 **Void** is an open-source alternative to Cursor, designed as an AI-powered code editor. It is a fork of the official [VS Code repository](https://github.com/microsoft/vscode).
 
-**Status:** Development is currently paused by the maintainers to explore new directions, but the codebase remains functional and open for study or forks.
+**Status:** Active development
 
 ## Architecture
 Void inherits VS Code's Electron-based architecture with specific additions for AI capabilities:

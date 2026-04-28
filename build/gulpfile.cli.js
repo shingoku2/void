@@ -110,8 +110,10 @@ const compileFromSources = (callback) => {
 };
 
 const acquireBuiltOpenSSL = (callback) => {
-	const untar = require('gulp-untar');
-	const gunzip = require('gulp-gunzip');
+	const zlib = require('zlib');
+	const tar = require('tar');
+	const through2 = require('through2');
+	const Vinyl = require('vinyl');
 	const dir = path.join(tmpdir(), 'vscode-openssl-download');
 	mkdirSync(dir, { recursive: true });
 
@@ -121,9 +123,51 @@ const acquireBuiltOpenSSL = (callback) => {
 		{ stdio: ['ignore', 'ignore', 'inherit'], cwd: dir }
 	);
 
+	// Custom transform: gulp-untar + gulp-gunzip replacement using native Node.js
+	function createTgzExtract() {
+		return through2.obj({ highWaterMark: 1 }, function (file, encoding, callback) {
+			if (file.isNull()) {
+				callback();
+				return;
+			}
+
+			const chunks = [];
+			const gunzipStream = zlib.createGunzip();
+			const extractStream = tar.extract();
+
+			file.contents.pipe(gunzipStream);
+
+			extractStream.on('entry', (header, stream, next) => {
+				const entryChunks = [];
+				stream.on('data', chunk => entryChunks.push(chunk));
+				stream.on('end', () => {
+					const contents = Buffer.concat(entryChunks);
+					const entryFile = new Vinyl({
+						cwd: file.cwd,
+						base: file.base,
+						path: path.join(file.base || '', header.name),
+						contents
+					});
+					this.push(entryFile);
+					next();
+				});
+				stream.resume();
+			});
+
+			extractStream.on('end', () => {
+				callback();
+			});
+
+			extractStream.on('error', err => {
+				callback(err);
+			});
+
+			gunzipStream.pipe(extractStream);
+		});
+	}
+
 	gulp.src('*.tgz', { cwd: dir })
-		.pipe(gunzip())
-		.pipe(untar())
+		.pipe(createTgzExtract())
 		.pipe(gulp.dest(`${root}/openssl`))
 		.on('error', callback)
 		.on('end', () => {

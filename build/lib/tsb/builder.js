@@ -80,7 +80,10 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
         }
         if (!file.contents) {
             host.removeScriptSnapshot(file.path);
-            delete lastBuildVersion[normalize(file.path)];
+            const normalizedPath = normalize(file.path);
+            delete lastBuildVersion[normalizedPath];
+            delete lastDtsHash[normalizedPath];
+            delete oldErrors[normalizedPath];
         }
         else {
             host.addScriptSnapshot(file.path, new VinylScriptSnapshot(file));
@@ -88,7 +91,11 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     }
     function baseFor(snapshot) {
         if (snapshot instanceof VinylScriptSnapshot) {
-            return cmd.options.outDir || snapshot.getBase();
+            // Use the parent of outDir as base (e.g., 'out' for outDir 'out/vs')
+            // This ensures gulp.dest('out') correctly writes to out/vs/...
+            const outDir = cmd.options.outDir;
+            const parentDir = outDir ? path_1.default.dirname(outDir) : snapshot.getBase();
+            return parentDir || snapshot.getBase();
         }
         else {
             return '';
@@ -652,3 +659,4 @@ class LanguageServiceHost {
         });
     }
 }
+//# sourceMappingURL=builder.js.map

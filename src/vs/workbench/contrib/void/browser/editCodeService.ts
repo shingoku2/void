@@ -45,10 +45,10 @@ import { IVoidModelService } from '../common/voidModelService.js';
 import { acceptBg, acceptBorder, buttonFontSize, buttonTextColor, rejectBg, rejectBorder } from '../common/helpers/colors.js';
 import { DiffArea, Diff, CtrlKZone, VoidFileSnapshot, DiffAreaSnapshotEntry, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
-// import { isMacintosh } from '../../../../base/common/platform.js';
-// import { VOID_OPEN_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
 const numLinesOfStr = (str: string) => str.split('\n').length
+
+const FAST_APPLY_MIN_CHARS = 1_000;
 
 
 export const getLengthOfTextPx = ({ tabWidth, spaceWidth, content }: { tabWidth: number, spaceWidth: number, content: string }) => {
@@ -768,6 +768,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 					_diffOfId: {},
 					_URI: uri,
 					_streamState: { isStreaming: false }, // when restoring, we will never be streaming
+					_streamStateLock: null,
 					_removeStylesFns: new Set(),
 				}
 			}
@@ -1199,7 +1200,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			if (this._settingsService.state.globalSettings.enableFastApply) {
 				const numCharsInFile = this._fileLengthOfGivenURI(opts.uri)
 				if (numCharsInFile === null) return null
-				if (numCharsInFile < 1000) { // slow apply for short files (especially important for empty files)
+				if (numCharsInFile < FAST_APPLY_MIN_CHARS) { // slow apply for short files (especially important for empty files)
 					res = this._initializeWriteoverStream(opts)
 				}
 				else {
@@ -1231,7 +1232,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 
 		const onDone = () => {
-			diffZone._streamState = { isStreaming: false, }
+			this._setStreamState(diffZone, { isStreaming: false, })
 			this._onDidChangeStreamingInDiffZone.fire({ uri, diffareaid: diffZone.diffareaid })
 			this._refreshStylesAndDiffsInURI(uri)
 			onFinishEdit()
@@ -1275,7 +1276,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 
 		const onDone = () => {
-			diffZone._streamState = { isStreaming: false, }
+			this._setStreamState(diffZone, { isStreaming: false, })
 			this._onDidChangeStreamingInDiffZone.fire({ uri, diffareaid: diffZone.diffareaid })
 			this._refreshStylesAndDiffsInURI(uri)
 			onFinishEdit()
@@ -1371,6 +1372,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 				streamRequestIdRef,
 				line: startLine,
 			},
+			_streamStateLock: null,
 			_diffOfId: {}, // added later
 			_removeStylesFns: new Set(),
 		}
@@ -1402,6 +1404,40 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			if (diffArea._streamState.isStreaming) return true
 		}
 		return false
+	}
+
+	// Flag to prevent concurrent _streamState mutations
+	// Set to true during onDone/onError callbacks, checked in _stopIfStreaming
+	private _isUpdatingStreamState = false;
+
+	// Helper to safely update _streamState - prevents race conditions between
+	// onDone/onError callbacks and _stopIfStreaming
+	private _setStreamState(diffZone: DiffZone, newState: DiffZone['_streamState']): void {
+		// If an update is already in progress, check if we should still proceed
+		// For setting isStreaming: false, always do it
+		// For other updates, skip if another update is happening
+		if (this._isUpdatingStreamState && newState.isStreaming) {
+			return; // Skip - another update is in progress
+		}
+		this._isUpdatingStreamState = true;
+		try {
+			diffZone._streamState = newState;
+		} finally {
+			this._isUpdatingStreamState = false;
+		}
+	}
+
+	// Helper to safely update just the line property of _streamState
+	private _updateStreamStateLine(diffZone: DiffZone, line: number): void {
+		// Skip if streaming has been stopped (isStreaming is false)
+		if (!diffZone._streamState.isStreaming) {
+			return;
+		}
+		// Skip if another update is in progress
+		if (this._isUpdatingStreamState) {
+			return;
+		}
+		diffZone._streamState.line = line;
 	}
 
 
@@ -1502,7 +1538,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		// helpers
 		const onDone = () => {
 			console.log('called onDone')
-			diffZone._streamState = { isStreaming: false, }
+			this._setStreamState(diffZone, { isStreaming: false, })
 			this._onDidChangeStreamingInDiffZone.fire({ uri, diffareaid: diffZone.diffareaid })
 
 			if (ctrlKZoneIfQuickEdit) {
@@ -1578,7 +1614,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 						const [croppedText, deltaCroppedText, croppedSuffix] = extractText(fullTextSoFar, newText.length)
 						const { endLineInLlmTextSoFar } = this._writeStreamedDiffZoneLLMText(uri, originalCode, croppedText, deltaCroppedText, latestStreamLocationMutable)
-						diffZone._streamState.line = (diffZone.startLine - 1) + endLineInLlmTextSoFar // change coordinate systems from originalCode to full file
+						this._updateStreamStateLine(diffZone, (diffZone.startLine - 1) + endLineInLlmTextSoFar) // change coordinate systems from originalCode to full file
 
 						this._refreshStylesAndDiffsInURI(uri)
 
@@ -1794,7 +1830,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 
 		const onDone = () => {
-			diffZone._streamState = { isStreaming: false, }
+			this._setStreamState(diffZone, { isStreaming: false, })
 			this._onDidChangeStreamingInDiffZone.fire({ uri, diffareaid: diffZone.diffareaid })
 			this._refreshStylesAndDiffsInURI(uri)
 
@@ -1825,7 +1861,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		let shouldUpdateOrigStreamStyle = true
 		let oldBlocks: ExtractedSearchReplaceBlock[] = []
 		const addedTrackingZoneOfBlockNum: TrackingZone<SearchReplaceDiffAreaMetadata>[] = []
-		diffZone._streamState.line = 1
+		this._updateStreamStateLine(diffZone, 1)
 
 		const N_RETRIES = 4
 
@@ -1871,7 +1907,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 								const originalRange = findTextInCode(block.orig, originalFileCode, false, { startingAtLine, returnType: 'lines' })
 								if (typeof originalRange !== 'string') {
 									const [startLine, _] = convertOriginalRangeToFinalRange(originalRange)
-									diffZone._streamState.line = startLine
+									this._updateStreamStateLine(diffZone, startLine)
 									shouldUpdateOrigStreamStyle = false
 								}
 							}
@@ -1937,7 +1973,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 									this._llmMessageService.abort(streamRequestIdRef.current)
 									weAreAborting = false
 								}
-								diffZone._streamState.line = 1
+								this._updateStreamStateLine(diffZone, 1)
 								resMessageDonePromise()
 								this._refreshStylesAndDiffsInURI(uri)
 								return
@@ -1983,7 +2019,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 								{ startLineNumber: finalStartLine, startColumn: 1, endLineNumber: finalEndLine, endColumn: Number.MAX_SAFE_INTEGER }, // 1-indexed
 								{ shouldRealignDiffAreas: true }
 							)
-							diffZone._streamState.line = finalEndLine + 1
+							this._updateStreamStateLine(diffZone, finalEndLine + 1)
 							currStreamingBlockNum = blockNum + 1
 							continue
 						}
@@ -1999,7 +2035,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 						// const { endLine: currentEndLine } = addedTrackingZoneOfBlockNum[blockNum] // would be bad to do this because a lot of the bottom lines might be the same. more accurate to go with latestStreamLocationMutable
 						// diffZone._streamState.line = currentEndLine
-						diffZone._streamState.line = latestStreamLocationMutable.line
+						this._updateStreamStateLine(diffZone, latestStreamLocationMutable.line)
 
 					} // end for
 
@@ -2087,7 +2123,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 		this._llmMessageService.abort(streamRequestId)
 
-		diffZone._streamState = { isStreaming: false, }
+		this._setStreamState(diffZone, { isStreaming: false, })
 		this._onDidChangeStreamingInDiffZone.fire({ uri, diffareaid: diffZone.diffareaid })
 	}
 

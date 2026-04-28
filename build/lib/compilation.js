@@ -359,3 +359,4 @@ exports.watchApiProposalNamesTask = task.define('watch-api-proposal-names', () =
         .pipe(util.debounce(task))
         .pipe(gulp_1.default.dest('src'));
 });
+//# sourceMappingURL=compilation.js.map

@@ -93,7 +93,7 @@ function bundleESMTask(opts) {
                     build.onLoad({ filter: /\.(js|ts)$/ }, async ({ path: filePath }) => {
                         const contents = await fs_1.default.promises.readFile(filePath, 'utf-8');
                         const isTS = filePath.endsWith('.ts');
-                        // TS Boilerplate (only for .js files)
+                        // TS Boilerplate (only for .js files — .ts files are handled by esbuild)
                         let newContents;
                         if (!isTS && !opts.skipTSBoilerplateRemoval?.(entryPoint.name)) {
                             newContents = bundle.removeAllTSBoilerplate(contents);
@@ -101,7 +101,7 @@ function bundleESMTask(opts) {
                         else {
                             newContents = contents;
                         }
-                        // File Content Mapper
+                        // File Content Mapper — normalize path and also try .js variant for .ts files
                         let normalizedPath = filePath.replace(/\\/g, '/');
                         let mapper = opts.fileContentMapper?.(normalizedPath);
                         if (!mapper && isTS) {

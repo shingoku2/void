@@ -54,7 +54,8 @@ exports.buildExtensionMedia = buildExtensionMedia;
 const stream_1 = require("stream");
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = __importDefault(require("child_process"));
-const glob_1 = __importDefault(require("glob"));
+// glob@10 - import named export for sync
+const glob_1 = require("glob");
 const gulp_1 = __importDefault(require("gulp"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
@@ -66,7 +67,7 @@ const gulp_filter_1 = __importDefault(require("gulp-filter"));
 const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
-const gulp_buffer_1 = __importDefault(require("gulp-buffer"));
+// gulp-buffer removed - vinyl files are already in buffer mode in this pipeline
 const jsoncParser = __importStar(require("jsonc-parser"));
 const dependencies_1 = require("./dependencies");
 const builtInExtensions_1 = require("./builtInExtensions");
@@ -130,6 +131,7 @@ function extractVsix() {
                         }
                         zipfile.openReadStream(entry, (err, readStream) => {
                             if (err) {
+                                zipfile.close(); // Release file descriptor on error
                                 finish(err);
                                 return;
                             }
@@ -152,7 +154,7 @@ function extractVsix() {
                         });
                     }
                 });
-                zipfile.on('error', finish);
+                zipfile.on('error', (err) => { zipfile.close(); finish(err); });
                 zipfile.readEntry();
             });
         }
@@ -163,7 +165,6 @@ function minifyExtensionResources(input) {
     const jsonFilter = (0, gulp_filter_1.default)(['**/*.json', '**/*.code-snippets'], { restore: true });
     return input
         .pipe(jsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const errors = [];
         const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
@@ -179,7 +180,6 @@ function updateExtensionPackageJSON(input, update) {
     const packageJsonFilter = (0, gulp_filter_1.default)('extensions/*/package.json', { restore: true });
     return input
         .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const data = JSON.parse(f.contents.toString('utf8'));
         f.contents = Buffer.from(JSON.stringify(update(data)));
@@ -237,7 +237,7 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
         }));
         // check for a webpack configuration files, then invoke webpack
         // and merge its output with the files stream.
-        const webpackConfigLocations = glob_1.default.sync(path_1.default.join(extensionPath, '**', webpackConfigFileName), { ignore: ['**/node_modules'] });
+        const webpackConfigLocations = (0, glob_1.sync)(path_1.default.join(extensionPath, '**', webpackConfigFileName), { ignore: ['**/node_modules'] });
         const webpackStreams = webpackConfigLocations.flatMap(webpackConfigPath => {
             const webpackDone = (err, stats) => {
                 (0, fancy_log_1.default)(`Bundled extension: ${ansi_colors_1.default.yellow(path_1.default.join(path_1.default.basename(extensionPath), path_1.default.relative(extensionPath, webpackConfigPath)))}...`);
@@ -327,13 +327,13 @@ function fromLocalNormal(extensionPath) {
             base: extensionPath,
             contents: fs_1.default.createReadStream(filePath)
         }));
-            const filesStream = new stream_1.PassThrough({ objectMode: true });
+        const filesStream = new stream_1.PassThrough({ objectMode: true });
         for (const file of files) {
             filesStream.write(file);
         }
         filesStream.end();
-            filesStream.on('end', () => result.end());
-            filesStream.pipe(result, { end: false });
+        filesStream.on('end', () => result.end());
+        filesStream.pipe(result, { end: false });
     })
         .catch(err => result.emit('error', err));
     return result.pipe((0, stats_1.createStatsStream)(path_1.default.basename(extensionPath)));
@@ -361,7 +361,6 @@ function fromMarketplace(serviceUrl, { name: extensionName, version, sha256, met
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(json({ __metadata: metadata }))
         .pipe(packageJsonFilter.restore);
 }
@@ -370,13 +369,12 @@ function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) 
     (0, fancy_log_1.default)('Using local VSIX for extension:', ansi_colors_1.default.yellow(`${extensionName}@${version}`), '...');
     const packageJsonFilter = (0, gulp_filter_1.default)('package.json', { restore: true });
     return gulp_1.default.src(vsixPath)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(through2_1.default.obj((f, _encoding, callback) => {
         const hash = crypto_1.default.createHash('sha256');
         hash.update(f.contents);
         const checksum = hash.digest('hex');
         if (checksum !== sha256) {
-            callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
+            return callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
         }
         else {
             callback(null, f);
@@ -386,7 +384,6 @@ function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) 
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(json({ __metadata: metadata }))
         .pipe(packageJsonFilter.restore);
 }
@@ -399,12 +396,10 @@ function fromGithub({ name, version, repo, sha256, metadata }) {
         name: name => name.endsWith('.vsix'),
         checksumSha256: sha256
     })
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(extractVsix())
         .pipe((0, gulp_filter_1.default)('extension/**'))
         .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
         .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
         .pipe(json({ __metadata: metadata }))
         .pipe(packageJsonFilter.restore);
 }
@@ -543,7 +538,7 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         return output;
     };
     const nativeExtensionsSet = new Set(nativeExtensions);
-    const localExtensionsDescriptions = (glob_1.default.sync('extensions/*/package.json')
+    const localExtensionsDescriptions = ((0, glob_1.sync)('extensions/*/package.json')
         .map(manifestPath => {
         const absoluteManifestPath = path_1.default.join(root, manifestPath);
         const extensionPath = path_1.default.dirname(path_1.default.join(root, manifestPath));
@@ -571,9 +566,12 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
             result = localExtensionsStream;
         }
         else {
-            result = combineStreams([localExtensionsStream, gulp_1.default.src(dependenciesSrc, { base: '.' })
-                .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', '.moduleignore')))
-                .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', `.moduleignore.${process.platform}`)))]);
+            result = combineStreams([
+                localExtensionsStream,
+                gulp_1.default.src(dependenciesSrc, { base: '.' })
+                    .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', '.moduleignore')))
+                    .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', `.moduleignore.${process.platform}`)))
+            ]);
         }
     }
     return result;

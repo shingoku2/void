@@ -83,9 +83,7 @@ The `source-map` package was updated from 0.6.1 to 0.7.0 to fix an RCE vulnerabi
 
 ## Project Status
 
-We've paused work on the Void IDE to explore novel coding ideas. Void will continue running, but without maintenance some existing features might stop working over time.
-
-We won't be actively reviewing Issues and PRs, but we respond to [email](mailto:hello@voideditor.com) inquiries about building and maintaining your own version of Void.
+Void is actively maintained. Contributions and issues are welcome — reach out via [Discord](https://discord.gg/RSNjgaugJs) or [email](mailto:hello@voideditor.com).
 
 ## Reference
 

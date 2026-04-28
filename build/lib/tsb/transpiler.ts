@@ -71,15 +71,20 @@ class OutputFileNameOracle {
 					cmdLine.options.configFilePath = configFilePath;
 				}
 				const isDts = file.endsWith('.d.ts');
-				if (isDts) {
-					file = file.slice(0, -5) + '.ts';
-					cmdLine.fileNames.push(file);
-				}
-				const outfile = (<InternalTsApi>ts).getOutputFileNames(cmdLine, file, true)[0];
-				if (isDts) {
-					cmdLine.fileNames.pop();
-				}
-				return outfile;
+			if (isDts) {
+				file = file.slice(0, -5) + '.ts';
+			}
+			// Always ensure the file is in cmdLine.fileNames for getOutputFileNames to work correctly
+			const idx = cmdLine.fileNames.indexOf(file);
+			const needsRestore = idx === -1;
+			if (needsRestore) {
+				cmdLine.fileNames.push(file);
+			}
+			const outfile = (<InternalTsApi>ts).getOutputFileNames(cmdLine, file, true)[0];
+			if (needsRestore) {
+				cmdLine.fileNames.pop();
+			}
+			return outfile;
 
 			} catch (err) {
 				console.error(file, cmdLine.fileNames);

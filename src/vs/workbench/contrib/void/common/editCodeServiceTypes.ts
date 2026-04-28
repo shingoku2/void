@@ -92,6 +92,8 @@ export type DiffZone = {
 		streamRequestIdRef?: undefined;
 		line?: undefined;
 	};
+	// Lock to serialize _streamState mutations and prevent race conditions
+	_streamStateLock: Promise<void> | null;
 	editorId?: undefined;
 	linkedStreamingDiffZone?: undefined;
 	_removeStylesFns: Set<Function> // these don't remove diffs or this diffArea, only their styles

@@ -33,8 +33,22 @@ export interface ITypeScriptBuilder {
 	languageService: ts.LanguageService;
 }
 
-function normalize(path: string): string {
-	return path.replace(/\\/g, '/');
+function normalize(fileName: string): string {
+	// Convert Windows backslashes to forward slashes
+	fileName = fileName.replace(/\\/g, '/');
+	// If fileName is an absolute path and fileNames contain relative paths,
+	// convert to relative path for proper getEmitOutput behavior
+	const normalizedPath = (<typeof ts>ts).normalizePath(fileName);
+	const idx = cmd.fileNames.indexOf(normalizedPath);
+	if (idx === -1) {
+		// Try to find a matching relative path
+		for (const fileNameInProject of cmd.fileNames) {
+			if (normalizedPath.endsWith(fileNameInProject)) {
+				return fileNameInProject;
+			}
+		}
+	}
+	return normalizedPath;
 }
 
 export function createTypeScriptBuilder(config: IConfiguration, projectFile: string, cmd: ts.ParsedCommandLine): ITypeScriptBuilder {
@@ -73,7 +87,11 @@ export function createTypeScriptBuilder(config: IConfiguration, projectFile: str
 
 	function baseFor(snapshot: ScriptSnapshot): string {
 		if (snapshot instanceof VinylScriptSnapshot) {
-			return cmd.options.outDir || snapshot.getBase();
+			// Use the parent of outDir as base (e.g., 'out' for outDir 'out/vs')
+			// This ensures gulp.dest('out') correctly writes to out/vs/...
+			const outDir = cmd.options.outDir;
+			const parentDir = outDir ? path.dirname(outDir) : snapshot.getBase();
+			return parentDir || snapshot.getBase();
 		} else {
 			return '';
 		}
