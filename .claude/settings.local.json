@@ -97,7 +97,10 @@
       "Bash(.build/electron/Void.exe --force-color .)",
       "Bash(VSCODE_DEV=1 VSCODE_CLI=1 .build/electron/Void.exe . --disable-extension=vscode.vscode-api-tests)",
       "Bash(taskkill *)",
-      "Bash(cmd //c \"set VSCODE_DEV=1&& set VSCODE_CLI=1&& .build\\\\\\\\electron\\\\\\\\Void.exe . --disable-extension=vscode.vscode-api-tests\")"
+"Bash(cmd //c \"set VSCODE_DEV=1&& set VSCODE_CLI=1&& .build\\\\\\\\electron\\\\\\\\Void.exe . --disable-extension=vscode.vscode-api-tests\")",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git merge *)"
     ]
   }
 }
