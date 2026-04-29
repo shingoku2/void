@@ -60,6 +60,7 @@ exports.filter = filter;
 exports.streamToPromise = streamToPromise;
 exports.getElectronVersion = getElectronVersion;
 const through2_1 = __importDefault(require("through2"));
+const event_stream_1 = __importDefault(require("event-stream"));
 const debounce_1 = __importDefault(require("debounce"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
 const gulp_rename_1 = __importDefault(require("gulp-rename"));
@@ -385,19 +386,15 @@ function rebase(count) {
     });
 }
 function filter(fn) {
-    const result = through2_1.default.obj(function (data, _enc, cb) {
+    const result = event_stream_1.default.through(function (data) {
         if (fn(data)) {
-            this.push(data);
+            this.emit('data', data);
         }
         else {
             result.restore.push(data);
         }
-        cb();
-    }, function (cb) {
-        result.restore.end();
-        cb();
     });
-    result.restore = through2_1.default.obj();
+    result.restore = event_stream_1.default.through();
     return result;
 }
 function streamToPromise(stream) {
