@@ -417,16 +417,34 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
  * platform that is being built.
  */
 const nativeExtensions = [
-	'microsoft-authentication',
+	// 'microsoft-authentication', // REMOVED: Not needed for Void
 ];
 
 const excludedExtensions = [
+	// Test-only - never ship
 	'vscode-api-tests',
 	'vscode-colorize-tests',
 	'vscode-colorize-perf-tests',
 	'vscode-test-resolver',
 	'ms-vscode.node-debug',
 	'ms-vscode.node-debug2',
+	// Bloat - niche languages (users install what they need)
+	'bat',
+	'clojure',
+	'coffeescript',
+	'fsharp',
+	'groovy',
+	'julia',
+	'latex',
+	'lua',
+	'objective-c',
+	'perl',
+	'pug',
+	'ruby',
+	'shaderlab',
+	// Cloud/Telemetry - never ship to users
+	'microsoft-authentication',
+	'npm',
 ];
 
 const marketplaceWebExtensionsExclude = new Set([
