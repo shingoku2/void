@@ -396,7 +396,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	})()
 
 	// Race the request against a timeout
-	Promise.race([requestPromise, new Promise((_, reject) => setTimeout(() => reject(new Error(`LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`)), DEFAULT_LLM_STREAM_TIMEOUT_MS))])
+	await Promise.race([requestPromise, new Promise((_, reject) => setTimeout(() => reject(new Error(`LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`)), DEFAULT_LLM_STREAM_TIMEOUT_MS))])
 		.catch(error => {
 			if (error instanceof OpenAI.APIError && error.status === 401) { onError({ message: invalidApiKeyMessage(providerName), fullError: error }); }
 			else if (error.message?.includes('timed out')) { onError({ message: error.message, fullError: error }); }
@@ -550,7 +550,6 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 				runOnText()
 			}
 			else if (e.content_block.type === 'redacted_thinking') {
-				console.log('delta', e.content_block.type)
 				if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
 				fullReasoning += '[redacted_thinking]'
 				runOnText()
@@ -883,7 +882,7 @@ const sendGeminiChat = async ({
 
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
-				onError({ message: 'Void: Response from model was empty.', fullError: null })
+				if (!timedOut) onError({ message: 'Void: Response from model was empty.', fullError: null })
 			} else {
 				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
@@ -893,6 +892,7 @@ const sendGeminiChat = async ({
 		})
 		.catch(error => {
 			if (!timedOut) clearTimeout(timeoutHandle)
+			if (timedOut) return // Already called onError in timeout handler
 			const message = error?.message
 			if (typeof message === 'string') {
 

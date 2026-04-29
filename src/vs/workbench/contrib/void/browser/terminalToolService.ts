@@ -344,8 +344,15 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 				})
 
 			// wait for result
-			await Promise.any([waitUntilDone, waitUntilInterrupt])
-				.finally(() => disposables.forEach(d => d.dispose()))
+			let resultReason: TerminalResolveReason | undefined;
+			try {
+				await Promise.any([waitUntilDone, waitUntilInterrupt])
+			} catch (e) {
+				// Both promises rejected - this shouldn't happen, but handle gracefully
+				// The error is likely from waitUntilInterrupt timing out, which is expected
+			} finally {
+				disposables.forEach(d => d.dispose())
+			}
 
 
 

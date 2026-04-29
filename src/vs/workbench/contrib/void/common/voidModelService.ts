@@ -57,6 +57,20 @@ class VoidModelService extends Disposable implements IVoidModelService {
 	_serviceBrand: undefined;
 	static readonly ID = 'voidVoidModelService';
 	private readonly _modelRefOfURI: Record<string, IReference<IResolvedTextEditorModel>> = {};
+	private readonly _maxModelRefs = 100; // Limit to prevent unbounded growth
+
+	private _cleanUpIfNeeded() {
+		const keys = Object.keys(this._modelRefOfURI);
+		if (keys.length > this._maxModelRefs) {
+			// Remove oldest half of entries (simple LRU approximation)
+			const toRemove = keys.slice(0, Math.floor(keys.length / 2));
+			for (const key of toRemove) {
+				const ref = this._modelRefOfURI[key];
+				ref.dispose();
+				delete this._modelRefOfURI[key];
+			}
+		}
+	}
 
 	constructor(
 		@ITextModelService private readonly _textModelService: ITextModelService,
@@ -74,6 +88,7 @@ class VoidModelService extends Disposable implements IVoidModelService {
 	initializeModel = async (uri: URI) => {
 		try {
 			if (uri.fsPath in this._modelRefOfURI) return;
+			this._cleanUpIfNeeded(); // Clean up before adding new entries
 			const editorModelRef = await this._textModelService.createModelReference(uri);
 			// Keep a strong reference to prevent disposal
 			this._modelRefOfURI[uri.fsPath] = editorModelRef;

@@ -69,17 +69,15 @@ Key Void services:
 ### Build Errors in extensions/typescript-language-features (99 errors)
 TypeScript version mismatch and `esModuleInterop` issues. Not critical for running Void but will cause TypeScript language server extension to fail compilation.
 
-### Supply Chain Risk: event-stream 3.3.4
-The `event-stream` package version 3.3.4 remains in the dependency tree (used by `flatmap-stream`). This version has known supply chain vulnerabilities. Consider running `npm audit` to identify mitigation paths.
-
 ### License Issue: scope-tailwind
 The `scope-tailwind` package uses AGPL-3.0 license, which may have licensing implications for the project.
 
 ### ES Version Drift
 Source code in `src` is compiled for ES2022 but extensions are compiled for ES2020. This mismatch may cause issues with certain language features.
 
-### Dependency: source-map updated to 0.7.0
-The `source-map` package was updated from 0.6.1 to 0.7.0 to fix an RCE vulnerability (CVE in older versions). Ensure your build uses the updated version.
+## Security
+
+For detailed information on dependency vulnerabilities and mitigations, see [SECURITY_DEPENDENCY_AUDIT.md](SECURITY_DEPENDENCY_AUDIT.md).
 
 ## Project Status
 
@@ -89,6 +87,7 @@ Void is actively maintained. Contributions and issues are welcome — reach out 
 
 - [Void Codebase Guide](VOID_CODEBASE_GUIDE.md) - Architecture and internal workings
 - [Contributing Guide](HOW_TO_CONTRIBUTE.md) - How to develop your own version of Void
+- [LLM Providers](VOID_SDKS.md) - Supported providers and API configuration
 - [void-builder repo](https://github.com/voideditor/void-builder) - Build pipeline documentation
 
 ## Support

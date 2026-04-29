@@ -207,6 +207,13 @@ export class MCPChannel implements IServerChannel {
 		}
 		catch (e) {
 			console.error('mcp channel: Call Error:', e)
+			// Return an error object so callers know the operation failed
+			return {
+				event: 'error',
+				text: `Channel call failed: ${e instanceof Error ? e.message : String(e)}`,
+				toolName: '',
+				serverName: '',
+			}
 		}
 	}
 
@@ -331,15 +338,23 @@ export class MCPChannel implements IServerChannel {
 			console.warn(`⚠️ MCP: Using stdio transport with command: ${server.command}`);
 
 			// console.log('ENV DATA: ', server.env)
+			// Only pass necessary environment variables, not the full process.env
+			const filteredEnv: Record<string, string> = {
+				PATH: process.env.PATH ?? '',
+				HOME: process.env.HOME ?? '',
+				USER: process.env.USER ?? '',
+			};
+			// Merge in any server-specific env vars (but don't leak full process.env)
+			if (server.env) {
+				for (const key of Object.keys(server.env)) {
+					if (key === 'PATH' || key === 'HOME' || key === 'USER') continue;
+					filteredEnv[key] = server.env[key] as string;
+				}
+			}
 			transport = new StdioClientTransport({
 				command: server.command,
 				args: server.args,
-				env: {
-					...server.env,
-					PATH: process.env.PATH,
-					HOME: process.env.HOME,
-					USER: process.env.USER,
-				} as Record<string, string>,
+				env: filteredEnv,
 			});
 
 			await client.connect(transport)
