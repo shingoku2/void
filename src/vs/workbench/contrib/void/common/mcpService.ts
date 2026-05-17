@@ -120,7 +120,8 @@ class MCPService extends Disposable implements IMCPService {
 	private readonly _setMCPServerState = async (serverName: string, newServer: MCPServer | undefined) => {
 		if (newServer === undefined) {
 			// Remove the server from the state
-			const { [serverName]: removed, ...remainingServers } = this.state.mcpServerOfName;
+			const remainingServers = { ...this.state.mcpServerOfName };
+			delete remainingServers[serverName];
 			this.state = {
 				...this.state,
 				mcpServerOfName: remainingServers
@@ -216,8 +217,9 @@ class MCPService extends Disposable implements IMCPService {
 			}
 
 			// Add the parameter to the params object
+			const description = propertyValues.description;
 			params[paramName] = {
-				description: JSON.stringify(propertyValues.description || '', null, 2) || '',
+				description: typeof description === 'string' ? description : JSON.stringify(description ?? '', null, 2),
 			}
 		});
 		return params;

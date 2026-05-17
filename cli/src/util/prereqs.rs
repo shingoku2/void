@@ -15,7 +15,8 @@ use super::errors::CodeError;
 
 lazy_static! {
 	static ref LDCONFIG_STDC_RE: Regex = Regex::new(r"libstdc\+\+.* => (.+)").unwrap();
-	static ref LDD_VERSION_RE: BinRegex = BinRegex::new(r"^ldd.*\s(\d+)\.(\d+)(?:\.(\d+))?\s").unwrap();
+	static ref LDD_VERSION_RE: BinRegex =
+		BinRegex::new(r"^ldd.*\s(\d+)\.(\d+)(?:\.(\d+))?\s").unwrap();
 	static ref GENERIC_VERSION_RE: Regex = Regex::new(r"^([0-9]+)\.([0-9]+)$").unwrap();
 	static ref LIBSTD_CXX_VERSION_RE: BinRegex =
 		BinRegex::new(r"GLIBCXX_([0-9]+)\.([0-9]+)(?:\.([0-9]+))?").unwrap();
@@ -187,10 +188,10 @@ async fn check_is_nixos() -> bool {
 ///    minimum requirements.
 #[cfg(not(windows))]
 pub async fn skip_requirements_check() -> bool {
-	std::env::var("VSCODE_SERVER_CUSTOM_GLIBC_LINKER").is_ok() ||
-	fs::metadata("/tmp/vscode-skip-server-requirements-check")
-		.await
-		.is_ok()
+	std::env::var("VSCODE_SERVER_CUSTOM_GLIBC_LINKER").is_ok()
+		|| fs::metadata("/tmp/vscode-skip-server-requirements-check")
+			.await
+			.is_ok()
 }
 
 #[cfg(windows)]
@@ -402,5 +403,4 @@ mod tests {
 			Some(SimpleSemver::new(2, 40, 0)),
 		);
 	}
-
 }
