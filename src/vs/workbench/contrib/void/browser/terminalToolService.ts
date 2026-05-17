@@ -12,7 +12,7 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { TerminalLocation } from '../../../../platform/terminal/common/terminal.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { ITerminalService, ITerminalInstance, ICreateTerminalOptions } from '../../../../workbench/contrib/terminal/browser/terminal.js';
-import { MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_CHARS, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js';
+import { MAX_TERMINAL_BG_COMMAND_TIME_SECS, MAX_TERMINAL_CHARS, MAX_TERMINAL_INACTIVE_TIME_SECS } from '../common/prompt/prompts.js';
 import { TerminalResolveReason } from '../common/toolsServiceTypes.js';
 import { timeout } from '../../../../base/common/async.js';
 
@@ -323,7 +323,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 					setTimeout(() => {
 						resolveReason = { type: 'timeout' };
 						res()
-					}, MAX_TERMINAL_BG_COMMAND_TIME * 1000)
+					}, MAX_TERMINAL_BG_COMMAND_TIME_SECS * 1000)
 				})
 				// inactivity-based timeout
 				: new Promise<void>(res => {
@@ -335,7 +335,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 
 							resolveReason = { type: 'timeout' };
 							res();
-						}, MAX_TERMINAL_INACTIVE_TIME * 1000);
+						}, MAX_TERMINAL_INACTIVE_TIME_SECS * 1000);
 					};
 
 					const dTimeout = terminal.onData(() => { resetTimer(); });
