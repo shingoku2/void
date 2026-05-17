@@ -509,7 +509,6 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			if (diffArea.type !== 'CtrlKZone') continue
 			if (!diffArea._mountInfo) {
 				diffArea._mountInfo = this._addCtrlKZoneInput(diffArea)
-				console.log('MOUNTED CTRLK', diffArea.diffareaid)
 			}
 			else {
 				diffArea._mountInfo.refresh()

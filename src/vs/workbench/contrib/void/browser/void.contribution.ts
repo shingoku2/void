@@ -56,7 +56,7 @@ import './tooltipService.js'
 import './voidOnboardingService.js'
 
 // register misc service
-import './miscWokrbenchContrib.js'
+import './miscWorkbenchContrib.js'
 
 // register file service (for explorer context menu)
 import './fileService.js'
