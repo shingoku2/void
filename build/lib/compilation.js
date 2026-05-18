@@ -45,7 +45,7 @@ exports.createCompile = createCompile;
 exports.transpileTask = transpileTask;
 exports.compileTask = compileTask;
 exports.watchTask = watchTask;
-const through2_1 = __importDefault(require("through2"));
+const event_stream_1 = __importDefault(require("event-stream"));
 const fs_1 = __importDefault(require("fs"));
 const gulp_1 = __importDefault(require("gulp"));
 const path_1 = __importDefault(require("path"));
@@ -99,7 +99,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         const isCSS = (f) => f.path.endsWith('.css') && !f.path.includes('fixtures');
         const noDeclarationsFilter = util.filter(data => !(/\.d\.ts$/.test(data.path)));
         const postcssNesting = require('postcss-nesting');
-        const input = (0, through2_1.default)({ objectMode: true });
+        const input = event_stream_1.default.through();
         const output = input
             .pipe(util.$if(isUtf8Test, bom())) // this is required to preserve BOM in test files that loose it otherwise
             .pipe(util.$if(!build && isRuntimeJs, util.appendOwnPathSourceURL()))
@@ -117,7 +117,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         })))
             .pipe(tsFilter.restore)
             .pipe(reporter.end(!!emitError));
-        return output;
+        return event_stream_1.default.duplex(input, output);
     }
     pipeline.tsProjectSrc = () => {
         return compilation.src({ base: src });
@@ -148,11 +148,11 @@ function compileTask(src, out, build, options = {}) {
             generator.execute();
         }
         // mangle: TypeScript to TypeScript
-        let mangleStream = (0, through2_1.default)({ objectMode: true });
+        let mangleStream = event_stream_1.default.through();
         if (build && !options.disableMangle) {
             let ts2tsMangler = new index_1.Mangler(compile.projectPath, (...data) => (0, fancy_log_1.default)(ansi_colors_1.default.blue('[mangler]'), ...data), { mangleExports: true, manglePrivateFields: true });
             const newContentsByFileName = ts2tsMangler.computeNewFileContents(new Set(['saveState']));
-            mangleStream = (0, through2_1.default)({ objectMode: true }, async function (data, _enc, callback) {
+            mangleStream = event_stream_1.default.through(async function write(data) {
                 const tsNormalPath = ts.normalizePath(data.path);
                 const newContents = (await newContentsByFileName).get(tsNormalPath);
                 if (newContents !== undefined) {
@@ -160,13 +160,11 @@ function compileTask(src, out, build, options = {}) {
                     data.sourceMap = newContents.sourceMap && JSON.parse(newContents.sourceMap);
                 }
                 this.push(data);
-                callback();
-            }, async function (callback) {
+            }, async function end() {
                 // free resources
                 (await newContentsByFileName).clear();
                 this.push(null);
                 ts2tsMangler = undefined;
-                callback();
             });
         }
         return srcPipe
@@ -202,7 +200,7 @@ class MonacoGenerator {
     _declarationResolver;
     constructor(isWatch) {
         this._isWatch = isWatch;
-        this.stream = (0, through2_1.default)({ objectMode: true });
+        this.stream = event_stream_1.default.through();
         this._watchedFiles = {};
         const onWillReadFile = (moduleId, filePath) => {
             if (!this._isWatch) {
@@ -283,14 +281,13 @@ function generateApiProposalNames() {
     const pattern = /vscode\.proposed\.([a-zA-Z\d]+)\.d\.ts$/;
     const versionPattern = /^\s*\/\/\s*version\s*:\s*(\d+)\s*$/mi;
     const proposals = new Map();
-    const input = (0, through2_1.default)({ objectMode: true });
+    const input = event_stream_1.default.through();
     const output = input
         .pipe(util.filter((f) => pattern.test(f.path)))
-        .pipe((0, through2_1.default)({ objectMode: true }, (f, _enc, callback) => {
+        .pipe(event_stream_1.default.through((f) => {
         const name = path_1.default.basename(f.path);
         const match = pattern.exec(name);
         if (!match) {
-            callback();
             return;
         }
         const proposalName = match[1];
@@ -301,8 +298,7 @@ function generateApiProposalNames() {
             proposal: `https://raw.githubusercontent.com/microsoft/vscode/main/src/vscode-dts/vscode.proposed.${proposalName}.d.ts`,
             version: version ? parseInt(version) : undefined
         });
-        callback();
-    }, function (callback) {
+    }, function () {
         const names = [...proposals.keys()].sort();
         const contents = [
             '/*---------------------------------------------------------------------------------------------',
@@ -322,13 +318,13 @@ function generateApiProposalNames() {
             'export type ApiProposalName = keyof typeof _allApiProposals;',
             '',
         ].join(eol);
-        this.push(new vinyl_1.default({
+        this.emit('data', new vinyl_1.default({
             path: 'vs/platform/extensions/common/extensionsApiProposals.ts',
             contents: Buffer.from(contents)
         }));
-        callback();
+        this.emit('end');
     }));
-    return output;
+    return event_stream_1.default.duplex(input, output);
 }
 const apiProposalNamesReporter = (0, reporter_1.createReporter)('api-proposal-names');
 exports.compileApiProposalNamesTask = task.define('compile-api-proposal-names', async () => {

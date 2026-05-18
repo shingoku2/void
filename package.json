@@ -267,7 +267,8 @@
       "flatmap-stream": "0.0.1-security"
     },
     "source-map": "^0.7.0",
-    "event-stream": "3.3.5"
+    "event-stream": "3.3.5",
+    "zod-to-json-schema": "3.24.6"
   },
   "repository": {
     "type": "git",

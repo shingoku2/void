@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import through2 from 'through2';
+import es from 'event-stream';
 import _debounce from 'debounce';
 import _filter from 'gulp-filter';
 import rename from 'gulp-rename';
@@ -423,19 +424,15 @@ export interface FilterStream extends NodeJS.ReadWriteStream {
 }
 
 export function filter(fn: (data: any) => boolean): FilterStream {
-	const result = <FilterStream><any>through2.obj(function (data, _enc, cb) {
+	const result = es.through(function (data) {
 		if (fn(data)) {
-			this.push(data);
+			this.emit('data', data);
 		} else {
 			(result as any).restore.push(data);
 		}
-		cb();
-	}, function (cb) {
-		(result as any).restore.end();
-		cb();
-	});
+	}) as unknown as FilterStream;
 
-	result.restore = through2.obj();
+	result.restore = es.through();
 	return result;
 }
 
