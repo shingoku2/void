@@ -7,7 +7,7 @@
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
 import { Ollama } from 'ollama';
-import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
+import OpenAI, { ClientOptions, AzureOpenAI, AzureClientOptions } from 'openai';
 import { MistralCore } from '@mistralai/mistralai/core.js';
 import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
 import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, Schema, Type } from '@google/genai';
@@ -125,7 +125,7 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const endpoint = `https://${thisConfig.project}.openai.azure.com/`;
 		const apiVersion = thisConfig.azureApiVersion ?? '2024-04-01-preview';
 		const options = { endpoint, apiKey: thisConfig.apiKey, apiVersion };
-		return new AzureOpenAI({ ...options, ...commonPayloadOpts });
+		return new AzureOpenAI({ ...options, ...commonPayloadOpts } as AzureClientOptions);
 	}
 	else if (providerName === 'awsBedrock') {
 		/**
