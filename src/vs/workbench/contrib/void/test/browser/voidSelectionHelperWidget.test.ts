@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Emitter } from '../../../../../base/common/event.js';
-import { IDisposable } from '../../../../../base/common/lifecycle.js';
 
 /**
  * Test for SelectionHelperContribution's mouseenter/mouseleave listener cleanup.
@@ -38,7 +36,7 @@ class MockHTMLElement {
 	dispatchEvent(type: string): void {
 		const handler = this.listeners.get(`${type}`);
 		if (handler) {
-			handler.call(this);
+			handler.call(this, {} as Event);
 		}
 	}
 }

@@ -12,9 +12,9 @@ class MockReference<T> {
 	dispose() {}
 }
 
-import { VoidModelService, IVoidModelService } from '../voidModelService.js';
+import { VoidModelService } from '../../common/voidModelService.js';
 import { ITextModelService } from '../../../../../editor/common/services/resolverService.js';
-import { ITextFileService } from '../../../../../services/textfile/common/textfiles.js';
+import { ITextFileService } from '../../../../services/textfile/common/textfiles.js';
 
 suite('VoidModelService', () => {
 
@@ -23,7 +23,6 @@ suite('VoidModelService', () => {
 		test('cleans up oldest entries when exceeding max limit', async () => {
 			// Create a mock text model service
 			const createdRefs: Map<string, MockReference<any>> = new Map();
-			let callOrder = 0;
 
 			const mockTextModelService = {
 				async createModelReference(uri: URI) {

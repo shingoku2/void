@@ -5,10 +5,9 @@
 
 import assert from 'assert';
 import { Emitter } from '../../../../../base/common/event.js';
-import { LLMMessageService } from '../sendLLMMessageService.js';
-import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
-import { IVoidSettingsService } from './voidSettingsService.js';
-import { IMCPService } from './mcpService.js';
+import { LLMMessageService } from '../../common/sendLLMMessageService.js';
+import { IVoidSettingsService } from '../../common/voidSettingsService.js';
+import { IMCPService } from '../../common/mcpService.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
 
 // Helper to create a mock channel with event listeners
@@ -49,7 +48,7 @@ suite('LLMMessageService', () => {
 	suite('_clearChannelHooks abort handler cleanup', () => {
 
 		test('clears all hook types when abort is called', async () => {
-			const { mockChannel, emitters } = createMockChannel();
+			const { mockChannel } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -293,9 +292,11 @@ suite('LLMMessageService', () => {
 				messagesType: 'FIMMessage',
 				messages: { prefix: 'test', suffix: 'test', stopTokens: [] },
 				modelSelection: null, // null model selection
+				modelSelectionOptions: undefined,
+				overridesOfModel: undefined,
 				onText: () => {},
 				onFinalMessage: () => {},
-				onError: (e) => { errorCalled = true; errorMessage = e.message; },
+				onError: (e: any) => { errorCalled = true; errorMessage = e.message; },
 				onAbort: () => {},
 				logging: { loggingName: 'test' },
 			});
@@ -329,10 +330,14 @@ suite('LLMMessageService', () => {
 			const result = service.sendLLMMessage({
 				messagesType: 'chatMessages',
 				messages: [], // empty messages
+				separateSystemMessage: undefined,
+				chatMode: null,
 				modelSelection: { providerName: 'test', modelName: 'test' } as any,
+				modelSelectionOptions: undefined,
+				overridesOfModel: undefined,
 				onText: () => {},
 				onFinalMessage: () => {},
-				onError: (e) => { errorCalled = true; },
+				onError: (e: any) => { errorCalled = true; },
 				onAbort: () => {},
 				logging: { loggingName: 'test' },
 			});

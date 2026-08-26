@@ -70,7 +70,7 @@ suite('MCPChannel', () => {
 			// Create a mock channel that returns error for unknown commands
 			const mockChannel = {
 				listen: () => new (require('../../../../../base/common/event.js').Emitter)().event,
-				call: async (command: string) => {
+				call: async (command: string, _params?: any) => {
 					if (command === 'unknownCommand') {
 						throw new Error('Command not recognized');
 					}
@@ -136,19 +136,19 @@ suite('MCPChannel', () => {
 		});
 
 		test('server-specific env vars are merged except PATH/HOME/USER', () => {
-			const baseEnv = {
+			const baseEnv: Record<string, string> = {
 				PATH: '/usr/bin',
 				HOME: '/home/user',
 				USER: 'testuser',
 			};
 
-			const serverEnv = {
+			const serverEnv: Record<string, string> = {
 				MCP_PORT: '3000',
 				DEBUG: 'true',
 			};
 
 			// Merge server env but skip PATH/HOME/USER
-			const filteredEnv = { ...baseEnv };
+			const filteredEnv: Record<string, string> = { ...baseEnv };
 			for (const key of Object.keys(serverEnv)) {
 				if (key === 'PATH' || key === 'HOME' || key === 'USER') continue;
 				filteredEnv[key] = serverEnv[key];

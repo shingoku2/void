@@ -4,26 +4,26 @@
  *--------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Emitter } from '../../../../../base/common/event.js';
-import { IDisposable } from '../../../../../base/common/lifecycle.js';
 import { IEncryptionService } from '../../../../../platform/encryption/common/encryptionService.js';
 import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
-import { IMetricsService } from '../metricsService.js';
+import { IMetricsService } from '../../common/metricsService.js';
 
 // Mock implementations for testing
 class MockStorageService implements Partial<IStorageService> {
-	private store: Map<string, string> = new Map();
+	private _store: Map<string, string> = new Map();
 
-	get(key: string, _scope: StorageScope): string | undefined {
-		return this.store.get(key);
+	get(key: string, scope: StorageScope, fallbackValue: string): string;
+	get(key: string, scope: StorageScope): string | undefined;
+	get(key: string, _scope: StorageScope, fallbackValue?: string): string | undefined {
+		return this._store.get(key) ?? fallbackValue;
 	}
 
 	store(key: string, value: string, _scope: StorageScope, _target: any): void {
-		this.store.set(key, value);
+		this._store.set(key, value);
 	}
 
 	remove(key: string, _scope: StorageScope): void {
-		this.store.delete(key);
+		this._store.delete(key);
 	}
 }
 
@@ -42,9 +42,8 @@ class MockMetricsService implements Partial<IMetricsService> {
 }
 
 // Import after mocks are defined
-import { VoidSettingsService, IVoidSettingsService } from '../voidSettingsService.js';
-import { VOID_SETTINGS_STORAGE_KEY } from '../storageKeys.js';
-import { defaultState } from '../voidSettingsService.js';
+import { VoidSettingsService, defaultState } from '../../common/voidSettingsService.js';
+import { VOID_SETTINGS_STORAGE_KEY } from '../../common/storageKeys.js';
 
 suite('VoidSettingsService', () => {
 

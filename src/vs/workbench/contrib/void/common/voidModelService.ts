@@ -53,7 +53,7 @@ export interface IVoidModelService {
 
 export const IVoidModelService = createDecorator<IVoidModelService>('voidVoidModelService');
 
-class VoidModelService extends Disposable implements IVoidModelService {
+export class VoidModelService extends Disposable implements IVoidModelService {
 	_serviceBrand: undefined;
 	static readonly ID = 'voidVoidModelService';
 	private readonly _modelRefOfURI: Record<string, IReference<IResolvedTextEditorModel>> = {};
