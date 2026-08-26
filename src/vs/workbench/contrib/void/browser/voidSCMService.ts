@@ -10,7 +10,7 @@ import { ContextKeyExpr, IContextKey, IContextKeyService } from '../../../../pla
 import { ISCMService } from '../../scm/common/scm.js'
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
 import { IVoidSCMService } from '../common/voidSCMTypes.js'
-import { ISharedProcessService } from '../../../../platform/ipc/electron-sandbox/sharedProcessService.js'
+import { ISharedProcessService } from '../../../../platform/ipc/electron-sandbox/services.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
 import { ILLMMessageService } from '../common/sendLLMMessageService.js'

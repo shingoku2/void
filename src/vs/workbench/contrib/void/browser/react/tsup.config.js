@@ -3,8 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { defineConfig } from 'tsup';
-import { syncReactOutToWorkbenchOut } from './syncReactWorkbenchOut.js';
+import { defineConfig } from 'tsup'
 
 export default defineConfig({
 	entry: [
@@ -40,9 +39,5 @@ export default defineConfig({
 	treeshake: true,
 	esbuildOptions(options) {
 		options.outbase = 'src2'  // tries copying the folder hierarchy starting at src2
-	},
-	// Ensures `out/vs/workbench/.../react/out` updates on every tsup build, including `tsup --watch`
-	onSuccess: async () => {
-		syncReactOutToWorkbenchOut();
-	},
+	}
 })

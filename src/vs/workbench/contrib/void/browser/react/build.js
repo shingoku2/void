@@ -3,24 +3,20 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
+import { spawn } from 'cross-spawn'
+// Added lines below
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
-import postcssNesting from 'postcss-nesting';
-import { syncReactOutToWorkbenchOut } from './syncReactWorkbenchOut.js';
-import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const srcDir = path.join(__dirname, 'src');
-const src2Dir = path.join(__dirname, 'src2');
 
 function doesPathExist(filePath) {
 	try {
 		const stats = fs.statSync(filePath);
+
 		return stats.isFile();
 	} catch (err) {
 		if (err.code === 'ENOENT') {
@@ -30,113 +26,53 @@ function doesPathExist(filePath) {
 	}
 }
 
-function ensureDirExists(dirPath) {
-	if (!fs.existsSync(dirPath)) {
-		fs.mkdirSync(dirPath, { recursive: true });
-	}
-}
+/*
 
-// Find all CSS files in src directory recursively
-function findCssFiles(dir, files = []) {
-	const entries = fs.readdirSync(dir, { withFileTypes: true });
-	for (const entry of entries) {
-		const fullPath = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			findCssFiles(fullPath, files);
-		} else if (entry.name.endsWith('.css')) {
-			files.push(fullPath);
+This function finds `globalDesiredPath` given `localDesiredPath` and `currentPath`
+
+Diagram:
+
+...basePath/
+└── void/
+	├── ...currentPath/ (defined globally)
+	└── ...localDesiredPath/ (defined locally)
+
+*/
+function findDesiredPathFromLocalPath(localDesiredPath, currentPath) {
+
+	// walk upwards until currentPath + localDesiredPath exists
+	while (!doesPathExist(path.join(currentPath, localDesiredPath))) {
+		const parentDir = path.dirname(currentPath);
+
+		if (parentDir === currentPath) {
+			return undefined;
 		}
+
+		currentPath = parentDir;
 	}
-	return files;
+
+	// return the `globallyDesiredPath`
+	const globalDesiredPath = path.join(currentPath, localDesiredPath)
+	return globalDesiredPath;
 }
 
-// Copy non-CSS files from src to src2
-function copyNonCssFiles(srcPath, destPath) {
-	const entries = fs.readdirSync(srcPath, { withFileTypes: true });
-	ensureDirExists(destPath);
-
-	for (const entry of entries) {
-		const srcFile = path.join(srcPath, entry.name);
-		const destFile = path.join(destPath, entry.name);
-
-		if (entry.isDirectory()) {
-			copyNonCssFiles(srcFile, destFile);
-		} else if (!entry.name.endsWith('.css')) {
-			fs.copyFileSync(srcFile, destFile);
-		}
-	}
-}
-
-// Custom PostCSS plugin to wrap all rules in .void-scope
-function voidScopeWrap() {
-	return {
-		postcssPlugin: 'void-scope-wrap',
-		Rule(rule) {
-			// Skip if already wrapped
-			if (rule.selector && rule.selector.includes('.void-scope')) {
-				return;
-			}
-			// Split by comma for multiple selectors and wrap each
-			const selectors = rule.selector.split(',').map(s => `.void-scope ${s.trim()}`);
-			rule.selector = selectors.join(',\n');
-		}
-	};
-}
-voidScopeWrap.postcss = true;
-
-// Process a CSS file with Tailwind + scoping
-async function processCssFile(cssFilePath) {
-	const css = fs.readFileSync(cssFilePath, 'utf8');
-
-	// Process with Tailwind and nesting, then wrap in .void-scope
-	const result = await postcss([
-		postcssNesting(),
-		tailwindcss('./tailwind.config.js'),
-		voidScopeWrap()
-	]).process(css, { from: cssFilePath });
-
-	return result.css;
-}
-
-// Build CSS files from src to src2
-async function buildCss() {
-	ensureDirExists(src2Dir);
-
-	const cssFiles = findCssFiles(srcDir);
-
-	for (const cssFile of cssFiles) {
-		const relativePath = path.relative(srcDir, cssFile);
-		const outputPath = path.join(src2Dir, relativePath);
-
-		// Ensure output directory exists
-		const outputDir = path.dirname(outputPath);
-		ensureDirExists(outputDir);
-
-		console.log(`Processing ${relativePath}...`);
-		const processedCss = await processCssFile(cssFile);
-		fs.writeFileSync(outputPath, processedCss, 'utf8');
-	}
-}
-
-// Copy non-CSS files
-function copyAssets() {
-	copyNonCssFiles(srcDir, src2Dir);
-}
-
-// Hack to refresh styles automatically
+// hack to refresh styles automatically
 function saveStylesFile() {
 	setTimeout(() => {
 		try {
-			const pathToCssFile = path.join(src2Dir, 'styles.css');
-			if (!doesPathExist(pathToCssFile)) {
-				console.error('[void-css] Error finding styles.css');
+			const pathToCssFile = findDesiredPathFromLocalPath('./src/vs/workbench/contrib/void/browser/react/src2/styles.css', __dirname);
+
+			if (pathToCssFile === undefined) {
+				console.error('[scope-tailwind] Error finding styles.css');
 				return;
 			}
+
+			// Or re-write with the same content:
 			const content = fs.readFileSync(pathToCssFile, 'utf8');
 			fs.writeFileSync(pathToCssFile, content, 'utf8');
-			console.log('[void-css] Force-saved styles.css');
+			console.log('[scope-tailwind] Force-saved styles.css');
 		} catch (err) {
-			console.error('[void-css] Error saving styles.css:', err);
+			console.error('[scope-tailwind] Error saving styles.css:', err);
 		}
 	}, 6000);
 }
@@ -144,64 +80,75 @@ function saveStylesFile() {
 const args = process.argv.slice(2);
 const isWatch = args.includes('--watch') || args.includes('-w');
 
-async function runBuild() {
-	// Copy non-CSS files first
-	copyAssets();
-
-	// Build CSS
-	await buildCss();
-}
-
 if (isWatch) {
-	// Initial build if src2 doesn't exist
-	if (!fs.existsSync(src2Dir)) {
+	// this just builds it if it doesn't exist instead of waiting for the watcher to trigger
+	// Check if src2/ exists; if not, do an initial scope-tailwind build
+	if (!fs.existsSync('src2')) {
 		try {
-			console.log('Running initial void-css build to create src2 folder...');
-			await runBuild();
-			console.log('src2/ created successfully.');
+			console.log('🔨 Running initial scope-tailwind build to create src2 folder...');
+			execSync(
+				'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
+				{ stdio: 'inherit' }
+			);
+			console.log('✅ src2/ created successfully.');
 		} catch (err) {
-			console.error('Error running initial void-css build:', err);
+			console.error('❌ Error running initial scope-tailwind build:', err);
 			process.exit(1);
 		}
 	}
 
-	const npxCommand = os.platform() === 'win32' ? 'npx.cmd' : 'npx';
-	
-	// Watch mode using nodemon
-	const cssWatcher = spawn(npxCommand, [
+	// Watch mode
+	const scopeTailwindWatcher = spawn('npx', [
 		'nodemon',
 		'--watch', 'src',
 		'--ext', 'ts,tsx,css',
-		'--exec', 'node',
-		'--', 'build.js'
-	], { stdio: 'inherit', cwd: __dirname, shell: os.platform() === 'win32' });
+		'--exec',
+		'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"'
+	]);
 
-	const tsupWatcher = spawn(npxCommand, [
+	const tsupWatcher = spawn('npx', [
 		'tsup',
 		'--watch'
-	], { stdio: 'inherit', cwd: __dirname, shell: os.platform() === 'win32' });
+	]);
+
+	scopeTailwindWatcher.stdout.on('data', (data) => {
+		console.log(`[scope-tailwind] ${data}`);
+		// If the output mentions "styles.css", trigger the save:
+		if (data.toString().includes('styles.css')) {
+			saveStylesFile();
+		}
+	});
+
+	scopeTailwindWatcher.stderr.on('data', (data) => {
+		console.error(`[scope-tailwind] ${data}`);
+	});
+
+	// Handle tsup watcher output
+	tsupWatcher.stdout.on('data', (data) => {
+		console.log(`[tsup] ${data}`);
+	});
+
+	tsupWatcher.stderr.on('data', (data) => {
+		console.error(`[tsup] ${data}`);
+	});
 
 	// Handle process termination
 	process.on('SIGINT', () => {
-		cssWatcher.kill();
+		scopeTailwindWatcher.kill();
 		tsupWatcher.kill();
 		process.exit();
 	});
 
-	console.log('Watchers started! Press Ctrl+C to stop both watchers.');
+	console.log('🔄 Watchers started! Press Ctrl+C to stop both watchers.');
 } else {
 	// Build mode
-	console.log('Building...');
+	console.log('📦 Building...');
 
-	try {
-		await runBuild();
-	} catch (err) {
-		console.error('Error building CSS:', err);
-		process.exit(1);
-	}
+	// Run scope-tailwind once
+	execSync('npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"', { stdio: 'inherit' });
 
-	// Run tsup once (onSuccess in tsup.config.js copies bundle into workbench `out/`)
-	execSync('npx tsup', { stdio: 'inherit', cwd: __dirname });
+	// Run tsup once
+	execSync('npx tsup', { stdio: 'inherit' });
 
-	console.log('Build complete!');
+	console.log('✅ Build complete!');
 }

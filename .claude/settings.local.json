@@ -105,7 +105,8 @@
       "Bash(node_modules/.bin/tsc -p src/tsconfig.json --noEmit)",
       "Bash(node_modules/.bin/tsc -p src/tsconfig.json)",
       "Bash(node_modules/.bin/tsc -p src/tsconfig.json --noEmit --skipLibCheck)",
-      "Bash(grep -r \"extension\\\\|\\\\.ts$\\\\|\\\\.js$\" build/lib/tsb/builder.js)"
+      "Bash(grep -r \"extension\\\\|\\\\.ts$\\\\|\\\\.js$\" build/lib/tsb/builder.js)",
+      "Bash(cd *)"
     ]
   }
 }
