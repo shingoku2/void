@@ -71,6 +71,13 @@ module.exports = {
 				'void-border-3': 'var(--void-border-3)',
 				'void-border-4': 'var(--void-border-4)',
 
+				'void-surface-deep': 'var(--void-surface-deep)',
+				'void-line-1': 'var(--void-line-1)',
+				'void-line-2': 'var(--void-line-2)',
+				'void-line-3': 'var(--void-line-3)',
+				'void-accent-brand': 'var(--void-accent)',
+				'void-accent-brand-2': 'var(--void-accent-2)',
+
 				'void-ring-color': 'var(--void-ring-color)',
 				'void-link-color': 'var(--void-link-color)',
 

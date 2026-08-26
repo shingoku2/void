@@ -134,13 +134,7 @@ const testModules = (async function () {
 		isDefaultModules = pattern === defaultGlob;
 
 		promise = new Promise((resolve, reject) => {
-			glob(pattern, { cwd: out }, (err, files) => {
-				if (err) {
-					reject(err);
-				} else {
-					resolve(files);
-				}
-			});
+			glob.glob(pattern, { cwd: out }).then(files => resolve(files)).catch(err => reject(err));
 		});
 	}
 
@@ -254,7 +248,7 @@ async function runTestsInBrowser(testModules, browserType) {
 	}
 
 	// append CSS modules as query-param
-	await promisify(require('glob'))('**/*.css', { cwd: out }).then(async cssModules => {
+	await require('glob').glob('**/*.css', { cwd: out }).then(async cssModules => {
 		const cssData = await new Response((await new Response(cssModules.join(',')).blob()).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
 		target.searchParams.set('_devCssData', Buffer.from(cssData).toString('base64'));
 	});

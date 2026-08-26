@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import stream from 'stream';
 import through2 from 'through2';
 import fs from 'fs';
 import gulp from 'gulp';
@@ -97,7 +96,7 @@ export function createCompile(src: string, { build, emitError, transpileOnly, pr
 			.pipe(tsFilter.restore)
 			.pipe(reporter.end(!!emitError));
 
-		return output;
+		return util.duplex(input, output);
 	}
 	pipeline.tsProjectSrc = () => {
 		return compilation.src({ base: src });
@@ -347,7 +346,7 @@ function generateApiProposalNames() {
 			callback();
 		}));
 
-	return output;
+	return util.duplex(input, output);
 }
 
 const apiProposalNamesReporter = createReporter('api-proposal-names');

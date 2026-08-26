@@ -143,7 +143,7 @@
     "@azure/msal-node-extensions": "^1.5.0",
     "@vscode/extension-telemetry": "^0.9.8",
     "keytar": "file:./packageMocks/keytar",
-    "vscode-tas-client": "^0.1.84"
+    "vscode-tas-client": "^0.1.86"
   },
   "overrides": {
     "@azure/msal-node-runtime": "^0.18.1"

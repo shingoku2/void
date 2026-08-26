@@ -117,7 +117,7 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         })))
             .pipe(tsFilter.restore)
             .pipe(reporter.end(!!emitError));
-        return output;
+        return util.duplex(input, output);
     }
     pipeline.tsProjectSrc = () => {
         return compilation.src({ base: src });
@@ -328,7 +328,7 @@ function generateApiProposalNames() {
         }));
         callback();
     }));
-    return output;
+    return util.duplex(input, output);
 }
 const apiProposalNamesReporter = (0, reporter_1.createReporter)('api-proposal-names');
 exports.compileApiProposalNamesTask = task.define('compile-api-proposal-names', async () => {

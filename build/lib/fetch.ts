@@ -30,7 +30,7 @@ export function fetchUrls(urls: string[] | string, options: IFetchOptions): Node
 		urls = [urls];
 	}
 
-	return Readable.from(urls).pipe(through2.obj((data: string, cb) => {
+	return Readable.from(urls).pipe(through2.obj((data: string, _enc: BufferEncoding, cb: any) => {
 		const url = [options.base, data].join('');
 		fetchUrl(url, options).then(file => {
 			cb(undefined, file);

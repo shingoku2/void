@@ -315,7 +315,7 @@ export class PlaywrightDriver {
 	}
 
 	private async evaluateWithDriver<T>(pageFunction: PageFunction<IWindowDriver[], T>) {
-		return this.page.evaluate(pageFunction, [await this.getDriverHandle()]);
+		return this.page.evaluate(pageFunction, [await this.getDriverHandle()] as any as IWindowDriver[]);
 	}
 
 	wait(ms: number): Promise<void> {

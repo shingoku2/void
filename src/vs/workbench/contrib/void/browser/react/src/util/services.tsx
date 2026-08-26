@@ -44,7 +44,6 @@ import { ILanguageService } from '../../../../../../../editor/common/languages/l
 import { IVoidModelService } from '../../../../common/voidModelService.js'
 import { IWorkspaceContextService } from '../../../../../../../platform/workspace/common/workspace.js'
 import { IVoidCommandBarService } from '../../../voidCommandBarService.js'
-import { INativeHostService } from '../../../../../../../platform/native/common/native.js';
 import { IEditCodeService } from '../../../editCodeServiceInterface.js'
 import { IToolsService } from '../../../toolsService.js'
 import { IConvertToLLMMessageService } from '../../../convertToLLMMessageService.js'
@@ -220,7 +219,6 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IWorkspaceContextService: accessor.get(IWorkspaceContextService),
 
 		IVoidCommandBarService: accessor.get(IVoidCommandBarService),
-		INativeHostService: accessor.get(INativeHostService),
 		IToolsService: accessor.get(IToolsService),
 		IConvertToLLMMessageService: accessor.get(IConvertToLLMMessageService),
 		ITerminalService: accessor.get(ITerminalService),

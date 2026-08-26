@@ -10,6 +10,8 @@ import { fileURLToPath } from 'url';
 import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
 import postcssNesting from 'postcss-nesting';
+import { syncReactOutToWorkbenchOut } from './syncReactWorkbenchOut.js';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,19 +165,21 @@ if (isWatch) {
 		}
 	}
 
+	const npxCommand = os.platform() === 'win32' ? 'npx.cmd' : 'npx';
+	
 	// Watch mode using nodemon
-	const cssWatcher = spawn('npx', [
+	const cssWatcher = spawn(npxCommand, [
 		'nodemon',
 		'--watch', 'src',
 		'--ext', 'ts,tsx,css',
 		'--exec', 'node',
 		'--', 'build.js'
-	], { stdio: 'inherit', cwd: __dirname });
+	], { stdio: 'inherit', cwd: __dirname, shell: os.platform() === 'win32' });
 
-	const tsupWatcher = spawn('npx', [
+	const tsupWatcher = spawn(npxCommand, [
 		'tsup',
 		'--watch'
-	], { stdio: 'inherit', cwd: __dirname });
+	], { stdio: 'inherit', cwd: __dirname, shell: os.platform() === 'win32' });
 
 	// Handle process termination
 	process.on('SIGINT', () => {
@@ -196,7 +200,7 @@ if (isWatch) {
 		process.exit(1);
 	}
 
-	// Run tsup once
+	// Run tsup once (onSuccess in tsup.config.js copies bundle into workbench `out/`)
 	execSync('npx tsup', { stdio: 'inherit', cwd: __dirname });
 
 	console.log('Build complete!');

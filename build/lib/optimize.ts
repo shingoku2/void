@@ -10,7 +10,6 @@ import gulp from 'gulp';
 import filter from 'gulp-filter';
 import path from 'path';
 import fs from 'fs';
-import { pipeline } from 'stream/promises';
 import VinylFile from 'vinyl';
 import * as bundle from './bundle';
 import esbuild from 'esbuild';
@@ -236,11 +235,11 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 	const sourceMappingURL = sourceMapBaseUrl ? ((f: any) => `${sourceMapBaseUrl}/${f.relative}.map`) : undefined;
 
 	return async cb => {
-		const svgmin = require('gulp-svgmin') as typeof import('gulp-svgmin');
+		const _svgmin = require('gulp-svgmin') as typeof import('gulp-svgmin');
 
 		const jsFilter = filter('**/*.js', { restore: true });
-		const cssFilter = filter('**/*.css', { restore: true });
-		const svgFilter = filter('**/*.svg', { restore: true });
+		const _cssFilter = filter('**/*.css', { restore: true });
+		const _svgFilter = filter('**/*.svg', { restore: true });
 
 		const srcStream = gulp.src([src + '/**', '!' + src + '/**/*.map']);
 		const jsStream = srcStream
@@ -250,7 +249,7 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 		// Process JS files with esbuild
 		const processedJsFiles: VinylFile[] = [];
 		for await (const f of jsStream) {
-			const jsFile = f as VinylFile;
+			const jsFile = f as any as VinylFile;
 			if (!jsFile.path.endsWith('.js')) {
 				processedJsFiles.push(jsFile);
 				continue;
@@ -276,7 +275,7 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 						return;
 					}
 					jsFile.contents = contents;
-					jsFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
+					(jsFile as any).sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
 				}
 				processedJsFiles.push(jsFile);
 			} catch (err) {
@@ -289,7 +288,7 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 		const cssStream = gulp.src([src + '/**/*.css', '!' + src + '/**/*.map']);
 		const processedCssFiles: VinylFile[] = [];
 		for await (const f of cssStream) {
-			const cssFile = f as VinylFile;
+			const cssFile = f as any as VinylFile;
 			try {
 				const res = await esbuild.build({
 					entryPoints: [cssFile.path],
@@ -303,7 +302,7 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 				const mapOut = res.outputFiles.find(f => /\.css\.map$/.test(f.path));
 				if (cssOut) {
 					cssFile.contents = Buffer.from(cssOut.contents);
-					cssFile.sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
+					(cssFile as any).sourceMap = mapOut ? JSON.parse(mapOut.text) : undefined;
 				}
 				processedCssFiles.push(cssFile);
 			} catch (err) {
@@ -316,7 +315,7 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
 		const svgStream = gulp.src([src + '/**/*.svg', '!' + src + '/**/*.map']);
 		const processedSvgFiles: VinylFile[] = [];
 		for await (const f of svgStream) {
-			processedSvgFiles.push(f as VinylFile);
+			processedSvgFiles.push(f as any as VinylFile);
 		}
 
 		// Output

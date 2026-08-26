@@ -152,14 +152,14 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
         const testFileWithSourcemap = new vinyl_1.default({
             path: '/src/test/with-sourcemap.js',
             contents: Buffer.from('console.log("test");'),
-            base: '/src',
-            sourceMap: {
-                version: 3,
-                sources: ['test/with-sourcemap.ts'],
-                sourcesContent: ['console.log("test");'],
-                mappings: 'AAAA'
-            }
+            base: '/src'
         });
+        testFileWithSourcemap.sourceMap = {
+            version: 3,
+            sources: ['test/with-sourcemap.ts'],
+            sourcesContent: ['console.log("test");'],
+            mappings: 'AAAA'
+        };
         nlsStream.write(testFileWithSourcemap);
         nlsStream.end();
     });
@@ -220,7 +220,6 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
         // Test using simple through2 stream to verify the pattern
         const input = through2_1.default.obj();
         const output = input.pipe(through2_1.default.obj(function (f, _enc, cb) {
-            // If not a JS file with sourcemap, pass through unchanged
             if (!f.sourceMap || !/\.js$/.test(f.path)) {
                 return cb(null, f);
             }

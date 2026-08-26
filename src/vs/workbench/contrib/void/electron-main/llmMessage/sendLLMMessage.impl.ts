@@ -331,12 +331,6 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		onFinalMessage = newOnFinalMessage
 	}
 
-	let fullReasoningSoFar = ''
-	let fullTextSoFar = ''
-
-	let toolName = ''
-	let toolId = ''
-	let toolParamsStr = ''
 
 	// Wrap the entire streaming call in Promise.race with a timeout.
 	// This ensures the request completes or is rejected within DEFAULT_LLM_STREAM_TIMEOUT_MS.
@@ -836,7 +830,9 @@ const sendGeminiChat = async ({
 	const timeoutHandle = setTimeout(() => {
 		timedOut = true
 		// Abort the stream if possible
-		try { genAI.abort?.() } catch (_) { /* ignore */ }
+		// Try to abort using AbortController if we had passed it to generateContentStream
+		// In GoogleGenAI we don't pass an abort controller directly in this code, so rely on the aborter
+		try { _setAborter(() => {}) } catch (_) { /* ignore */ }
 		onError({ message: `LLM request timed out after ${DEFAULT_LLM_STREAM_TIMEOUT_MS / 1000}s`, fullError: new Error(`Gemini stream timeout`) })
 	}, DEFAULT_LLM_STREAM_TIMEOUT_MS)
 

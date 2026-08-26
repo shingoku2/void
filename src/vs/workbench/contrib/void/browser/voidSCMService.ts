@@ -10,7 +10,7 @@ import { ContextKeyExpr, IContextKey, IContextKeyService } from '../../../../pla
 import { ISCMService } from '../../scm/common/scm.js'
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
 import { IVoidSCMService } from '../common/voidSCMTypes.js'
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js'
+import { ISharedProcessService } from '../../../../platform/ipc/electron-sandbox/sharedProcessService.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
 import { ILLMMessageService } from '../common/sendLLMMessageService.js'
@@ -51,7 +51,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
 	constructor(
 		@ISCMService private readonly scmService: ISCMService,
-		@IMainProcessService mainProcessService: IMainProcessService,
+		@ISharedProcessService sharedProcessService: ISharedProcessService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IConvertToLLMMessageService private readonly convertToLLMMessageService: IConvertToLLMMessageService,
 		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,

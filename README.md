@@ -22,7 +22,7 @@ This repo contains the full sourcecode for Void. If you're new, welcome!
 ## Quick Start
 
 ```bash
-npm install           # Install dependencies (Node 20.18.2 required)
+npm install           # Install dependencies (Node 22.22.3 required)
 npm run watch         # Build and watch client + extensions in dev mode
 npm run buildreact    # Build Void React bundle (required before first launch)
 ./scripts/code.bat    # Windows: Launch Developer Mode window

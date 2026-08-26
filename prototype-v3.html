@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Void · V3 Prototype — Spatial Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: var(--void-bg-0); }
+  .v-pulse { animation: vp 1.4s ease-in-out infinite; }
+  @keyframes vp { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.85); } }
+  button { font-family: inherit; }
+  input, textarea { font-family: inherit; color: inherit; background: transparent; border: 0; outline: 0; resize: none; }
+  .palette-bg { animation: fade .12s ease-out; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .palette { animation: pop .14s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--void-line-2); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="chat-mock.jsx"></script>
+<script type="text/babel" src="ide-chrome.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+
+const MODELS = [
+  { id: 'sonnet-4.5', name: 'claude-sonnet-4.5', sub: 'recommended', dot: 'var(--void-accent)' },
+  { id: 'opus-4', name: 'claude-opus-4', sub: 'deep work · slow', dot: 'var(--void-accent-3)' },
+  { id: 'haiku-4', name: 'claude-haiku-4', sub: 'fast · cheap', dot: 'var(--void-good)' },
+  { id: 'gpt-5', name: 'gpt-5', sub: 'OpenAI', dot: 'var(--void-fg-2)' },
+  { id: 'qwen3', name: 'qwen3-coder-480b', sub: 'local · ollama', dot: 'var(--void-warn)' },
+];
+const MODES = [
+  { id: 'agent', name: 'Agent', sub: 'autonomous · uses tools' },
+  { id: 'edit', name: 'Edit', sub: 'targeted file edits' },
+  { id: 'ask', name: 'Ask', sub: 'no tools · just answer' },
+];
+const SLASH = [
+  { cmd: '/edit', sub: 'edit selected file' },
+  { cmd: '/explain', sub: 'walk me through this code' },
+  { cmd: '/test', sub: 'generate or run tests' },
+  { cmd: '/fix', sub: 'find & fix problems' },
+  { cmd: '/review', sub: 'PR-style review of changes' },
+  { cmd: '/checkpoint', sub: 'snapshot current state' },
+];
+const MENTIONS = [
+  { kind: 'file', label: 'SidebarChat.tsx', sub: 'browser/react/src/sidebar-tsx' },
+  { kind: 'file', label: 'voidSettingsPane.ts', sub: 'browser' },
+  { kind: 'symbol', label: 'renderInput', sub: 'function · SidebarChat.tsx' },
+  { kind: 'symbol', label: 'IChatThreadService', sub: 'interface' },
+  { kind: 'folder', label: 'react/src', sub: 'directory' },
+  { kind: 'git', label: 'HEAD~3', sub: 'commit · feat: signals' },
+];
+
+// ---------- Palette ----------
+const Palette = ({ open, onClose, onPick }) => {
+  const [q, setQ] = useState('');
+  const [tab, setTab] = useState('all');
+  const inputRef = useRef(null);
+  useEffect(() => { if (open) { setQ(''); setTab('all'); setTimeout(() => inputRef.current?.focus(), 30); } }, [open]);
+  if (!open) return null;
+  const all = [
+    ...MODELS.map(m => ({ kind: 'model', label: m.name, sub: m.sub, dot: m.dot, pick: { type: 'model', id: m.id, name: m.name } })),
+    ...MODES.map(m => ({ kind: 'mode', label: m.name, sub: m.sub, pick: { type: 'mode', id: m.id, name: m.name } })),
+    { kind: 'cmd', label: 'New thread', sub: 'start a fresh conversation', pick: { type: 'new' } },
+    { kind: 'cmd', label: 'Resume in CLI', sub: 'open thread in void terminal', pick: { type: 'cli' } },
+    { kind: 'cmd', label: 'Toggle auto-approve', sub: 'currently: edits only', pick: { type: 'autoapprove' } },
+    { kind: 'cmd', label: 'Pin current message', sub: '★', pick: { type: 'pin' } },
+  ];
+  const filtered = all.filter(x => {
+    if (tab !== 'all' && x.kind !== tab) return false;
+    if (!q) return true;
+    return (x.label + ' ' + x.sub).toLowerCase().includes(q.toLowerCase());
+  });
+  return (
+    <div className="palette-bg" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(7,7,11,0.6)', backdropFilter: 'blur(8px)', zIndex: 50, display: 'grid', placeItems: 'start center', paddingTop: '12vh' }}>
+      <div className="palette" onClick={e => e.stopPropagation()} style={{ width: 'min(620px, 88vw)', background: 'var(--void-bg-1)', border: '1px solid var(--void-line-2)', borderRadius: 14, boxShadow: 'var(--shadow-pop)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--void-line-1)' }}>
+          <span style={{ color: 'var(--void-fg-3)', fontSize: 15 }}>⌘K</span>
+          <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Switch model, mode, or run a command…" style={{ flex: 1, fontSize: 14, color: 'var(--void-fg-0)', padding: '4px 0' }} />
+          <kbd style={kbdInline}>esc</kbd>
+        </div>
+        <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--void-line-1)' }}>
+          {['all','model','mode','cmd'].map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ ...chipBtn, background: tab === t ? 'var(--void-bg-3)' : 'transparent', color: tab === t ? 'var(--void-fg-0)' : 'var(--void-fg-2)' }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ maxHeight: 360, overflow: 'auto', padding: '6px 0' }}>
+          {filtered.length === 0 && <div style={{ padding: 20, color: 'var(--void-fg-3)', textAlign: 'center', fontSize: 13 }}>nothing matches "{q}"</div>}
+          {filtered.map((x, i) => (
+            <div key={i} onClick={() => { onPick(x.pick); onClose(); }} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--void-bg-3)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <span style={{ width: 20, height: 20, borderRadius: 5, background: 'var(--void-bg-3)', display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--void-fg-2)', fontFamily: 'var(--void-mono)' }}>
+                {x.kind === 'model' ? '◐' : x.kind === 'mode' ? '◇' : '⏵'}
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--void-fg-0)' }}>{x.label}</span>
+              <span style={{ fontSize: 12, color: 'var(--void-fg-3)' }}>{x.sub}</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)' }}>{x.kind}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Threads drawer ----------
+const ThreadsDrawer = ({ open, onClose, current, onPick, onNew }) => {
+  if (!open) return null;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'absolute', top: 0, right: 0, bottom: 0, width: 340,
+        background: 'var(--void-bg-1)', borderLeft: '1px solid var(--void-line-2)',
+        boxShadow: '-30px 0 60px rgba(0,0,0,0.6)', animation: 'pop .16s ease-out',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--void-line-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, color: 'var(--void-fg-0)', fontWeight: 500, flex: 1 }}>Threads</span>
+          <button style={{ ...btnGhost, padding: '4px 8px' }} onClick={onNew}>+ New</button>
+          <button style={{ ...btnGhost, padding: '4px 7px' }} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: '6px 0' }}>
+          {SAMPLE_THREADS.map(t => (
+            <div key={t.id} onClick={() => { onPick(t); onClose(); }} style={{
+              padding: '10px 16px', cursor: 'pointer',
+              background: current === t.id ? 'linear-gradient(90deg, rgba(139,140,255,0.08), transparent)' : 'transparent',
+              borderLeft: current === t.id ? '2px solid var(--void-accent)' : '2px solid transparent',
+            }}
+            onMouseEnter={e => current !== t.id && (e.currentTarget.style.background = 'var(--void-bg-2)')}
+            onMouseLeave={e => current !== t.id && (e.currentTarget.style.background = 'transparent')}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                {t.pinned && <span style={{ color: 'var(--void-accent-3)', fontSize: 10 }}>★</span>}
+                <span style={{ fontSize: 12.5, color: 'var(--void-fg-0)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', display: 'flex', gap: 8 }}>
+                <span>{t.when}</span><span>·</span><span>{(t.tokens/1000).toFixed(1)}k tok</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Composer with mention/slash inline menu ----------
+const Composer = ({ wide, model, mode, onOpenPalette }) => {
+  const [text, setText] = useState('/edit wrap the composer in a responsive container that activates above 560px panel width');
+  const [chips, setChips] = useState([
+    { kind: 'file', label: 'SidebarChat.tsx', sub: 'active' },
+    { kind: 'symbol', label: '@selection', sub: 'L120-160' },
+  ]);
+  const [menu, setMenu] = useState(null); // 'slash' | 'mention' | null
+  const taRef = useRef(null);
+  const dropRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); onOpenPalette(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onOpenPalette]);
+
+  const items = menu === 'slash' ? SLASH : menu === 'mention' ? MENTIONS : [];
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    setText(v);
+    const last = v.split(/\s/).pop() || '';
+    if (last.startsWith('/')) setMenu('slash');
+    else if (last.startsWith('@')) setMenu('mention');
+    else setMenu(null);
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault(); setDragOver(false);
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length) {
+      setChips(c => [...c, ...files.map(f => ({ kind: 'file', label: f.name, sub: `${(f.size/1024).toFixed(1)}kb` }))]);
+    }
+  };
+
+  return (
+    <div
+      ref={dropRef}
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      style={{ position: 'relative' }}
+    >
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: wide ? '14px 28px 16px' : '10px 14px 12px' }}>
+        <div style={{
+          background: 'var(--void-bg-2)', border: `1px solid ${dragOver ? 'var(--void-accent)' : 'var(--void-line-2)'}`, borderRadius: 12,
+          padding: '10px 12px',
+          boxShadow: dragOver ? '0 0 0 4px rgba(139,140,255,0.15), 0 8px 28px rgba(0,0,0,0.5)' : '0 0 0 1px rgba(139,140,255,0.06), 0 8px 28px rgba(0,0,0,0.5)',
+          transition: 'border-color .12s, box-shadow .12s',
+          position: 'relative',
+        }}>
+          {dragOver && (
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', color: 'var(--void-accent)', fontSize: 13, fontFamily: 'var(--void-mono)', background: 'rgba(11,11,18,0.85)', borderRadius: 12, zIndex: 1 }}>
+              drop to attach
+            </div>
+          )}
+          {/* Chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {chips.map((c, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 4px 3px 8px', border: '1px solid var(--void-line-1)', borderRadius: 999, background: 'var(--void-bg-3)', fontSize: 11, color: 'var(--void-fg-1)', fontFamily: 'var(--void-mono)' }}>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: c.kind === 'symbol' ? 'var(--void-accent-3)' : 'var(--void-accent)' }} />
+                {c.label}
+                {c.sub && <span style={{ color: 'var(--void-fg-3)' }}>· {c.sub}</span>}
+                <button onClick={() => setChips(arr => arr.filter((_, j) => j !== i))} style={{ ...btnGhost, padding: '0 5px', borderColor: 'transparent', color: 'var(--void-fg-3)', fontSize: 10 }}>✕</button>
+              </span>
+            ))}
+            <button onClick={() => setChips(c => [...c, { kind: 'file', label: 'newFile.ts', sub: 'attached' }])} style={{ ...chipBtn, fontFamily: 'var(--void-sans)' }}>＋ Add context</button>
+          </div>
+
+          {/* Menu (slash/mention) */}
+          {menu && (
+            <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 12, right: 12, background: 'var(--void-bg-3)', border: '1px solid var(--void-line-2)', borderRadius: 10, boxShadow: 'var(--shadow-pop)', overflow: 'hidden', zIndex: 5, maxHeight: 240, overflowY: 'auto' }}>
+              <div style={{ padding: '6px 12px', fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', borderBottom: '1px solid var(--void-line-1)' }}>{menu === 'slash' ? 'commands' : 'mentions'}</div>
+              {items.map((it, i) => (
+                <div key={i} onClick={() => {
+                  const parts = text.split(/\s/);
+                  const last = parts.pop() || '';
+                  const inserted = menu === 'slash' ? it.cmd : `@${it.label}`;
+                  const newText = [...parts, inserted].join(' ') + ' ';
+                  setText(newText);
+                  if (menu === 'mention') setChips(c => [...c, it]);
+                  setMenu(null);
+                  taRef.current?.focus();
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--void-bg-4)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                style={{ padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 12.5 }}>
+                  <span style={{ fontFamily: 'var(--void-mono)', color: menu === 'slash' ? 'var(--void-accent-3)' : 'var(--void-accent)' }}>
+                    {menu === 'slash' ? it.cmd : '@' + it.label}
+                  </span>
+                  <span style={{ color: 'var(--void-fg-3)', fontSize: 11 }}>{it.sub}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={handleChange}
+            onPaste={e => {
+              const items = [...(e.clipboardData?.items || [])];
+              const img = items.find(i => i.type.startsWith('image/'));
+              if (img) {
+                e.preventDefault();
+                setChips(c => [...c, { kind: 'file', label: 'pasted-image.png', sub: 'image · clipboard' }]);
+              }
+            }}
+            placeholder="Ask, edit, plan… ⌘K for palette · / for commands · @ to mention"
+            style={{ width: '100%', minHeight: 64, fontSize: 14, color: 'var(--void-fg-0)', lineHeight: 1.55, padding: '2px 0' }}
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <button style={iconBtn} title="Attach" onClick={() => setChips(c => [...c, { kind: 'file', label: 'untitled.ts', sub: 'attached' }])}>📎</button>
+            <button style={iconBtn} title="Image">🖼</button>
+            <button style={iconBtn} title="Voice">●</button>
+            <span style={{ width: 1, height: 16, background: 'var(--void-line-2)', margin: '0 4px' }} />
+            <button style={chipBtn} onClick={onOpenPalette}>{mode.name} ▾</button>
+            <button style={chipBtn} onClick={onOpenPalette}>{model.name} ▾</button>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)' }}>{text.length} tok · est $0.0008</span>
+            <button style={btnPrimary}>Send  ⌘↵</button>
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 10.5, color: 'var(--void-fg-3)', textAlign: 'center' }}>
+          drop files anywhere · paste images · <kbd style={kbdInline}>⌘K</kbd> palette · <kbd style={kbdInline}>/</kbd> commands · <kbd style={kbdInline}>@</kbd> mention
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const chipBtn = { ...btnGhost, padding: '3px 8px', fontSize: 11, color: 'var(--void-fg-2)', borderColor: 'var(--void-line-1)' };
+const kbdInline = { fontFamily: 'var(--void-mono)', fontSize: 10, padding: '1px 5px', borderRadius: 3, border: '1px solid var(--void-line-1)', background: 'var(--void-bg-2)', color: 'var(--void-fg-2)' };
+const iconBtn = { ...btnGhost, padding: '4px 7px', fontSize: 12, lineHeight: 1, borderColor: 'transparent', color: 'var(--void-fg-2)' };
+const Pill = ({ label, dot, onClick }) => (
+  <span onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, border: '1px solid var(--void-line-1)', background: 'var(--void-bg-2)', fontSize: 11, color: 'var(--void-fg-2)', cursor: onClick ? 'pointer' : 'default', whiteSpace: 'nowrap', flexShrink: 0 }}>
+    {dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: dot }} />}
+    {label}
+  </span>
+);
+
+const Bubble = ({ role, children, pinned, onPin, onCopy }) => {
+  const isUser = role === 'user';
+  return (
+    <div style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'flex-start' }}>
+      <Avatar kind={isUser ? 'user' : 'assistant'} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+          <span style={{ fontSize: 11, color: isUser ? 'var(--void-fg-2)' : 'var(--void-accent)', fontWeight: 500, letterSpacing: 0.2 }}>
+            {isUser ? 'You' : 'Void'}
+          </span>
+          {pinned && <span style={{ fontSize: 10, color: 'var(--void-accent-3)' }}>★ pinned</span>}
+          <div style={{ flex: 1 }} />
+          <button className="msg-act" onClick={onPin} style={{ ...btnGhost, padding: '2px 6px', fontSize: 10, opacity: 0.5 }}>★</button>
+          <button className="msg-act" onClick={onCopy} style={{ ...btnGhost, padding: '2px 6px', fontSize: 10, opacity: 0.5 }}>copy</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// ---------- V3 Plan Rail ----------
+const STEPS_INITIAL = [
+  { id: 's1', label: 'Initial prompt', sub: '2m ago', kind: 'user', done: true, anchor: 'step-1' },
+  { id: 's2', label: 'Investigation', sub: '3 tools · 1.4s', kind: 'tools', done: true, anchor: 'step-2' },
+  { id: 's3', label: 'Proposed diff', sub: '+24 −7', kind: 'edit', done: true, branch: true, current: true, anchor: 'step-3' },
+  { id: 's4', label: 'Apply patch', sub: 'pending review', kind: 'edit', done: false, anchor: 'step-4' },
+  { id: 's5', label: 'Run tests', sub: '— queued', kind: 'tools', done: false, anchor: 'step-5' },
+];
+
+const PlanRail = ({ steps, activeId, onJump, onAdd, collapsed, onToggle }) => {
+  if (collapsed) {
+    return (
+      <div style={{ width: 40, borderRight: '1px solid var(--void-line-1)', background: 'var(--void-bg-0)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '14px 0', gap: 10 }}>
+        <button onClick={onToggle} style={{ ...btnGhost, padding: '4px 6px', fontSize: 12, borderColor: 'transparent' }} title="Show plan">▸</button>
+        {steps.map(s => (
+          <div key={s.id} onClick={() => onJump(s.anchor)} title={s.label} style={{
+            width: 14, height: 14, borderRadius: '50%', cursor: 'pointer',
+            background: s.id === activeId ? 'var(--void-accent)' : s.done ? 'var(--void-bg-3)' : 'transparent',
+            border: s.id === activeId ? '2px solid #fff' : s.done ? '1px solid var(--void-line-3)' : '1px dashed var(--void-line-2)',
+            boxShadow: s.id === activeId ? '0 0 0 3px rgba(139,140,255,0.18)' : 'none',
+          }} />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={{ width: 220, borderRight: '1px solid var(--void-line-1)', background: 'var(--void-bg-0)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '12px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', flex: 1 }}>Plan</span>
+        <button onClick={onToggle} style={{ ...btnGhost, padding: '2px 6px', fontSize: 10, borderColor: 'transparent', color: 'var(--void-fg-3)' }} title="Collapse">◂</button>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative', padding: '4px 0 12px' }}>
+        <div style={{ position: 'absolute', left: 26, top: 12, bottom: 14, width: 1, background: 'var(--void-line-1)' }} />
+        {steps.map(s => (
+          <div key={s.id} onClick={() => onJump(s.anchor)} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 14px', cursor: 'pointer',
+            background: s.id === activeId ? 'linear-gradient(90deg, rgba(139,140,255,0.10), transparent)' : 'transparent',
+            borderLeft: s.id === activeId ? '2px solid var(--void-accent)' : '2px solid transparent',
+            paddingLeft: s.id === activeId ? 12 : 14,
+          }}
+          onMouseEnter={e => s.id !== activeId && (e.currentTarget.style.background = 'rgba(139,140,255,0.04)')}
+          onMouseLeave={e => s.id !== activeId && (e.currentTarget.style.background = 'transparent')}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', marginTop: 4, flexShrink: 0,
+              background: s.id === activeId ? 'var(--void-accent)' : s.done ? 'var(--void-bg-3)' : 'transparent',
+              border: s.id === activeId ? '2px solid #fff' : s.done ? '1px solid var(--void-line-3)' : '1px dashed var(--void-line-2)',
+              boxShadow: s.id === activeId ? '0 0 0 4px rgba(139,140,255,0.18)' : 'none',
+            }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12, color: s.done ? 'var(--void-fg-0)' : 'var(--void-fg-3)', fontWeight: s.id === activeId ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</div>
+              <div style={{ fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sub}</div>
+              {s.branch && (
+                <div style={{ marginTop: 6, fontSize: 10.5 }}>
+                  <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '2px 6px', borderRadius: 4, background: 'var(--void-bg-3)', border: '1px solid var(--void-line-1)', color: 'var(--void-fg-2)' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--void-accent-3)' }} />
+                    branch · alt
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div style={{ padding: '12px 14px 0' }}>
+          <button onClick={onAdd} style={{ ...btnGhost, width: '100%', borderStyle: 'dashed', fontSize: 11, padding: '6px 8px' }}>＋ Add step</button>
+        </div>
+      </div>
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--void-line-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)' }}>
+          <span>3 of 5 done</span><span>1.4k tok</span>
+        </div>
+        <div style={{ height: 4, background: 'var(--void-bg-3)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: '60%', height: '100%', background: 'linear-gradient(90deg, var(--void-accent), var(--void-accent-3))' }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StepHeading = ({ label, anchor }) => (
+  <div id={anchor} style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0 16px', scrollMarginTop: 20 }}>
+    <div style={{ flex: 1, height: 1, background: 'var(--void-line-1)' }} />
+    <span style={{ fontFamily: 'var(--void-serif)', fontSize: 13.5, fontStyle: 'italic', color: 'var(--void-fg-3)', whiteSpace: 'nowrap' }}>{label}</span>
+    <div style={{ flex: 1, height: 1, background: 'var(--void-line-1)' }} />
+  </div>
+);
+
+const InvestigationCard = () => (
+  <div style={{ marginLeft: 36, marginBottom: 18, border: '1px solid var(--void-line-1)', borderRadius: 12, background: 'linear-gradient(180deg, var(--void-bg-2), var(--void-bg-1))', overflow: 'hidden' }}>
+    <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--void-accent)" strokeWidth="1.5" style={{ flexShrink: 0 }}>
+        <circle cx="8" cy="8" r="3" /><circle cx="8" cy="8" r="6" opacity="0.4" />
+      </svg>
+      <span style={{ fontSize: 12.5, color: 'var(--void-fg-0)', fontWeight: 500, whiteSpace: 'nowrap' }}>Investigation</span>
+      <span style={{ fontSize: 11, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>read · grep · edit</span>
+      <div style={{ flex: 1 }} />
+      <span style={{ fontSize: 11, color: 'var(--void-fg-3)', whiteSpace: 'nowrap', flexShrink: 0 }}>1.4s · 12kb read</span>
+    </div>
+    <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {SAMPLE_MESSAGES.slice(2, 5).map((t, i) => <ToolRow key={i} tool={t} variant="mid" />)}
+    </div>
+  </div>
+);
+
+// ---------- Main ----------
+const App = () => {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [model, setModel] = useState(MODELS[0]);
+  const [mode, setMode] = useState(MODES[0]);
+  const [thread, setThread] = useState(SAMPLE_THREADS[0]);
+  const [pinned, setPinned] = useState({});
+  const [panelW, setPanelW] = useState(820);
+  const [steps, setSteps] = useState(STEPS_INITIAL);
+  const [activeStep, setActiveStep] = useState('s3');
+  const [railOpen, setRailOpen] = useState(true);
+  const dragRef = useRef(null);
+  const scrollRef = useRef(null);
+
+  const onPaletteSelect = (pick) => {
+    if (!pick) return;
+    if (pick.type === 'model') setModel(MODELS.find(m => m.id === pick.id));
+    if (pick.type === 'mode') setMode(MODES.find(m => m.id === pick.id));
+    if (pick.type === 'new') setThread({ id: 'new', title: 'New thread', when: 'now', tokens: 0 });
+  };
+
+  // resize via drag handle
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragRef.current) return;
+      const dx = dragRef.current.startX - e.clientX;
+      const next = Math.max(440, Math.min(1100, dragRef.current.startW + dx));
+      setPanelW(next);
+    };
+    const onUp = () => { dragRef.current = null; document.body.style.cursor = ''; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
+  const jumpTo = (anchor) => {
+    const el = scrollRef.current?.querySelector(`#${anchor}`);
+    if (el && scrollRef.current) {
+      const top = el.offsetTop - 16;
+      scrollRef.current.scrollTo({ top, behavior: 'smooth' });
+      const stepId = steps.find(s => s.anchor === anchor)?.id;
+      if (stepId) setActiveStep(stepId);
+    }
+  };
+
+  const addStep = () => {
+    const n = steps.length + 1;
+    setSteps([...steps, { id: `s${n}`, label: 'Custom step', sub: 'planned', kind: 'edit', done: false, anchor: `step-${n}` }]);
+  };
+
+  const wide = panelW >= 540;
+  const veryWide = panelW >= 700;
+  const showRail = railOpen && veryWide;
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--void-bg-0)', fontFamily: 'var(--void-sans)' }}>
+      {/* Title bar */}
+      <div style={{ height: 32, background: 'var(--void-bg-0)', borderBottom: '1px solid var(--void-line-1)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, fontSize: 11.5, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)' }}>
+        <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#ff6258' }} />
+        <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#ffbe2f' }} />
+        <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#27c93f' }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>void · {thread.title}</div>
+        <span>v0.7 · spatial</span>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <ActivityBar />
+        <EditorStub />
+
+        {/* Resize handle */}
+        <div
+          onMouseDown={(e) => { dragRef.current = { startX: e.clientX, startW: panelW }; document.body.style.cursor = 'ew-resize'; }}
+          style={{ width: 4, cursor: 'ew-resize', background: 'transparent', position: 'relative', zIndex: 2 }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--void-line-2)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        />
+
+        {/* Chat panel */}
+        <div style={{ width: panelW, background: 'var(--void-bg-1)', borderLeft: '1px solid var(--void-line-1)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Top — minimal */}
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--void-line-1)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(7,7,11,0.6)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, cursor: 'pointer' }} onClick={() => setDrawerOpen(true)}>
+              <div style={{ width: 14, height: 14, borderRadius: 4, background: 'linear-gradient(135deg,#8b8cff,#a78bff)', boxShadow: '0 0 12px rgba(139,140,255,0.45)', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: 'var(--void-fg-1)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{thread.title}</span>
+              <span style={{ fontSize: 11, color: 'var(--void-fg-3)', fontFamily: 'var(--void-mono)', whiteSpace: 'nowrap' }}>/ thread</span>
+            </div>
+            <Pill label={model.name} dot={model.dot} onClick={() => setPaletteOpen(true)} />
+            <Pill label={mode.name} onClick={() => setPaletteOpen(true)} />
+            <button style={{ ...btnGhost, padding: '4px 9px', fontFamily: 'var(--void-mono)', fontSize: 10.5 }} onClick={() => setPaletteOpen(true)}>⌘K</button>
+            <button style={{ ...btnGhost, padding: '4px 8px', fontSize: 11 }} title="Resume in CLI">⌥ CLI</button>
+          </div>
+
+          {/* Two-pane body */}
+          <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+            {wide && <PlanRail steps={steps} activeId={activeStep} onJump={jumpTo} onAdd={addStep} collapsed={!showRail} onToggle={() => setRailOpen(o => !o)} />}
+
+            <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '20px 0', minWidth: 0 }}>
+              <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 28px' }}>
+
+                <StepHeading label="step 01 · prompt" anchor="step-1" />
+                <Bubble role="user" pinned={pinned['u1']} onPin={() => setPinned(p => ({ ...p, u1: !p.u1 }))} onCopy={() => navigator.clipboard?.writeText(SAMPLE_MESSAGES[0].body)}>
+                  <div style={{ fontSize: 14, lineHeight: 1.65, fontFamily: 'var(--void-serif)', color: 'var(--void-fg-0)' }}>
+                    {SAMPLE_MESSAGES[0].body}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>
+                    {SAMPLE_MESSAGES[0].refs.map((r, i) => <ChipFile key={i} {...r} />)}
+                  </div>
+                </Bubble>
+
+                <StepHeading label="step 02 · investigate" anchor="step-2" />
+                <Bubble role="assistant" pinned={pinned['a1']} onPin={() => setPinned(p => ({ ...p, a1: !p.a1 }))} onCopy={() => navigator.clipboard?.writeText(SAMPLE_MESSAGES[1].body)}>
+                  <div style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--void-fg-0)' }}>
+                    {SAMPLE_MESSAGES[1].body.split('\n\n').map((p, i) => <p key={i} style={{ margin: '0 0 8px' }}>{p}</p>)}
+                  </div>
+                  <ol style={{ margin: '4px 0 0 18px', padding: 0, fontSize: 14, lineHeight: 1.7, color: 'var(--void-fg-1)' }}>
+                    {SAMPLE_MESSAGES[1].list.map((l, i) => <li key={i} style={{ margin: '6px 0' }}>{l}</li>)}
+                  </ol>
+                </Bubble>
+                <InvestigationCard />
+
+                <StepHeading label="step 03 · proposed change" anchor="step-3" />
+                <Bubble role="assistant" pinned={pinned['a2']} onPin={() => setPinned(p => ({ ...p, a2: !p.a2 }))} onCopy={() => navigator.clipboard?.writeText('diff…')}>
+                  <div style={{ fontSize: 14, lineHeight: 1.7 }}>{SAMPLE_MESSAGES[5].body}</div>
+                  <CodeBlock code={SAMPLE_MESSAGES[5].code} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button style={btnGhost}>Copy as prompt</button>
+                    <button style={btnGhost}>★ Pin</button>
+                    <button style={btnGhost}>↩ Branch from here</button>
+                    <button style={btnGhost}>⚑ Checkpoint</button>
+                  </div>
+                </Bubble>
+
+                <div id="step-4" style={{ scrollMarginTop: 20, marginLeft: 36, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--void-fg-2)', marginBottom: 12 }}>
+                  <span className="v-pulse" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--void-accent)', boxShadow: '0 0 0 4px rgba(139,140,255,0.18)' }} />
+                  <span style={{ fontFamily: 'var(--void-mono)' }}>composing patch · 2 / 3 files</span>
+                  <span style={{ flex: 1, height: 1, background: 'var(--void-line-1)', marginLeft: 8 }} />
+                </div>
+
+                <div id="step-5" style={{ scrollMarginTop: 20, height: 1 }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Composer — large, centered */}
+          <div style={{ borderTop: '1px solid var(--void-line-1)', background: 'linear-gradient(180deg, rgba(7,7,11,0.6), rgba(11,11,18,1))' }}>
+            <Composer wide={wide} model={model} mode={mode} onOpenPalette={() => setPaletteOpen(true)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <StatusBar tokens={`${(thread.tokens/1000).toFixed(1)}k`} cost="$0.21" />
+
+      <Palette open={paletteOpen} onClose={() => setPaletteOpen(false)} onPick={onPaletteSelect} />
+      <ThreadsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} current={thread.id} onPick={setThread} onNew={() => { setThread({ id: 'new', title: 'New thread', when: 'now', tokens: 0 }); setDrawerOpen(false); }} />
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

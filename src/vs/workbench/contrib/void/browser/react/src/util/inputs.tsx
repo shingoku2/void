@@ -976,7 +976,7 @@ export const VoidInputBox = ({ onChangeText, onCreateInstance, inputBoxRef, plac
 	return <WidgetComponent
 		className='
 			bg-void-bg-1
-			@@void-force-child-placeholder-void-fg-1
+			void-force-child-placeholder-void-fg-1
 		'
 		ctor={InputBox}
 		propsFn={useCallback((container) => [
@@ -1510,9 +1510,9 @@ export const _VoidSelectBox = <T,>({ onChangeSelection, onCreateInstance, select
 
 	return <WidgetComponent
 		className={`
-			@@select-child-restyle
-			@@[&_select]:!void-text-void-fg-3
-			@@[&_select]:!void-text-xs
+			select-child-restyle
+			[&_select]:!void-text-void-fg-3
+			[&_select]:!void-text-xs
 			!text-void-fg-3
 			${className ?? ''}
 		`}
@@ -1635,7 +1635,7 @@ export const BlockCode = ({ initValue, language, maxHeight, showScrollbars }: Bl
 
 	return <div ref={divRef} className='relative z-0 px-2 py-1 bg-void-bg-3'>
 		<WidgetComponent
-			className='@@bg-editor-style-override' // text-sm
+			className='bg-editor-style-override' // text-sm
 			ctor={useCallback((container) => {
 				return instantiationService.createInstance(
 					CodeEditorWidget,
@@ -1963,7 +1963,7 @@ const SingleDiffEditor = ({ block, lang }: { block: ExtractedSearchReplaceBlock,
 	}, [originalModel, modifiedModel, instantiationService]);
 
 	return (
-		<div className="w-full bg-void-bg-3 @@bg-editor-style-override" ref={divRef} />
+		<div className="w-full bg-void-bg-3 bg-editor-style-override" ref={divRef} />
 	);
 };
 

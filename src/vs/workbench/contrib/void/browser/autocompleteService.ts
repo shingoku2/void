@@ -19,7 +19,6 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { isWindows } from '../../../../base/common/platform.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { FeatureName } from '../common/voidSettingsTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 // import { IContextGatheringService } from './contextGatheringService.js';
 
@@ -67,7 +66,7 @@ Details
 */
 
 class LRUCache<K, V> {
-	public items: bOfAKV;
+	public items: Map<K, V>;
 	private keyOrder: K[];
 	private maxSize: number;
 	private disposeCallback?: (value: V, key?: K) => void;
@@ -745,7 +744,7 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 				if (oldestPending === undefined) {
 					oldestPending = autocompletion
 				}
-				if (numPending >= MAX_PENDING_REQUESTS) {
+				if (numPending >= MAX_PENDING_REQUESTS && oldestPending !== undefined) {
 					// cancel the oldest pending request and remove it from cache
 					this._autocompletionsOfDocument[docUriStr].delete(oldestPending.id)
 					break
@@ -864,9 +863,11 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 			}, TIMEOUT_TIME)
 
 			// Clear the timeout when the promise resolves
-			newAutocompletion.llmPromise
-				.then(() => clearTimeout(timeoutHandle))
-				.catch(() => clearTimeout(timeoutHandle))
+			if (newAutocompletion.llmPromise) {
+				newAutocompletion.llmPromise
+					.then(() => clearTimeout(timeoutHandle))
+					.catch(() => clearTimeout(timeoutHandle))
+			}
 
 		})
 

@@ -375,7 +375,7 @@ function processCoreBundleFormat(base: string, fileHeader: string, languages: La
 			}
 		}
 
-		emitter.push(new File({
+		(emitter as any).push(new File({
 			contents: Buffer.from(`${fileHeader}
 globalThis._VSCODE_NLS_MESSAGES=${JSON.stringify(nlsResult)};
 globalThis._VSCODE_NLS_LANGUAGE=${JSON.stringify(language.id)};`),

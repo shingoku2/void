@@ -416,7 +416,7 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
  * All extensions that are known to have some native component and thus must be built on the
  * platform that is being built.
  */
-const nativeExtensions = [
+const nativeExtensions: string[] = [
 	// 'microsoft-authentication', // REMOVED: Not needed for Void
 ];
 
@@ -526,8 +526,8 @@ export function packageNativeLocalExtensionsStream(forWeb: boolean, disableMangl
  */
 export function packageAllLocalExtensionsStream(forWeb: boolean, disableMangle: boolean): Stream {
 	return mergeStream(
-		packageNonNativeLocalExtensionsStream(forWeb, disableMangle),
-		packageNativeLocalExtensionsStream(forWeb, disableMangle)
+		packageNonNativeLocalExtensionsStream(forWeb, disableMangle) as any,
+		packageNativeLocalExtensionsStream(forWeb, disableMangle) as any
 	);
 }
 
@@ -644,7 +644,7 @@ export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
 
 	const marketplaceExtensionsStream = minifyExtensionResources(
 		mergeStream(
-			...marketplaceExtensionsDescriptions
+			...(marketplaceExtensionsDescriptions
 				.map(extension => {
 					const src = getExtensionStream(extension).pipe(rename(p => p.dirname = `extensions/${p.dirname}`));
 					return updateExtensionPackageJSON(src, (data: any) => {
@@ -653,7 +653,7 @@ export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
 						delete data.devDependencies;
 						return data;
 					});
-				})
+				}) as any)
 		)
 	);
 

@@ -45,12 +45,12 @@ function main(): Promise<void> {
 							}
 						}
 					}
-				})),
+				})) as any,
 
 			// extensions
-			vfs.src('.build/extensions/**/nls.metadata.json', { base: '.build/extensions' }),
-			vfs.src('.build/extensions/**/nls.metadata.header.json', { base: '.build/extensions' }),
-			vfs.src('.build/extensions/**/package.nls.json', { base: '.build/extensions' })
+			vfs.src('.build/extensions/**/nls.metadata.json', { base: '.build/extensions' }) as any,
+			vfs.src('.build/extensions/**/nls.metadata.header.json', { base: '.build/extensions' }) as any,
+			vfs.src('.build/extensions/**/package.nls.json', { base: '.build/extensions' }) as any
 		).pipe(merge({
 			fileName: 'combined.nls.metadata.json',
 			jsonSpace: '',
@@ -115,7 +115,7 @@ function main(): Promise<void> {
 
 		const nlsMessagesJs = vfs.src('out-build/nls.messages.js', { base: 'out-build' });
 
-		mergeStream(combinedMetadataJson, nlsMessagesJs)
+		mergeStream(combinedMetadataJson as any, nlsMessagesJs as any)
 			.pipe(gzip({ append: false }))
 			.pipe(vfs.dest('./nlsMetadata'))
 			.pipe(through2.obj(function (data: Vinyl, _, cb) {

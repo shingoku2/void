@@ -21,7 +21,7 @@ export const VoidTooltip = () => {
 
 	return (
 
-		// use native colors so we don't have to worry about @@void-scope styles
+		// use native colors so we don't have to worry about void-scope styles
 		// --void-bg-1: var(--vscode-input-background);
 		// --void-bg-1-alt: var(--vscode-badge-background);
 		// --void-bg-2: var(--vscode-sideBar-background);

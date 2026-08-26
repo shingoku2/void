@@ -27,21 +27,21 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
 		const output = input
 			.pipe(through2.obj(function (f: VinylFile, _enc, cb) {
 				// Transform function - processes each file
-				if (!f.sourceMap || !/\.js$/.test(f.path)) {
+				if (!(f as any).sourceMap || !/\.js$/.test(f.path)) {
 					return cb(null, f);
 				}
 
-				let source = f.sourceMap.sources[0];
+				let source = (f as any).sourceMap.sources[0];
 				if (!source) {
 					return cb(null, f);
 				}
 
-				const root = f.sourceMap.sourceRoot;
+				const root = (f as any).sourceMap.sourceRoot;
 				if (root) {
 					source = path.join(root, source);
 				}
 
-				const typescript = f.sourceMap.sourcesContent?.[0];
+				const typescript = (f as any).sourceMap.sourcesContent?.[0];
 				if (!typescript) {
 					cb(new Error(`File ${f.relative} does not have the original content in the source map.`));
 					return;
@@ -170,14 +170,14 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
 		const testFileWithSourcemap = new VinylFile({
 			path: '/src/test/with-sourcemap.js',
 			contents: Buffer.from('console.log("test");'),
-			base: '/src',
-			sourceMap: {
-				version: 3,
-				sources: ['test/with-sourcemap.ts'],
-				sourcesContent: ['console.log("test");'],
-				mappings: 'AAAA'
-			}
-		} as any);
+			base: '/src'
+		});
+		(testFileWithSourcemap as any).sourceMap = {
+			version: 3,
+			sources: ['test/with-sourcemap.ts'],
+			sourcesContent: ['console.log("test");'],
+			mappings: 'AAAA'
+		};
 
 		(nlsStream as any).write(testFileWithSourcemap);
 		(nlsStream as any).end();
@@ -245,8 +245,7 @@ suite('NLS through2.obj() Callback Pattern Tests', () => {
 		// Test using simple through2 stream to verify the pattern
 		const input = through2.obj();
 		const output = input.pipe(through2.obj(function (f: VinylFile, _enc, cb) {
-			// If not a JS file with sourcemap, pass through unchanged
-			if (!f.sourceMap || !/\.js$/.test(f.path)) {
+			if (!(f as any).sourceMap || !/\.js$/.test(f.path)) {
 				return cb(null, f);
 			}
 			cb(null, f);

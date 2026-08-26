@@ -91,11 +91,7 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     }
     function baseFor(snapshot) {
         if (snapshot instanceof VinylScriptSnapshot) {
-            // Use the parent of outDir as base (e.g., 'out' for outDir 'out/vs')
-            // This ensures gulp.dest('out') correctly writes to out/vs/...
-            const outDir = cmd.options.outDir;
-            const parentDir = outDir ? path_1.default.dirname(outDir) : snapshot.getBase();
-            return parentDir || snapshot.getBase();
+            return cmd.options.outDir || snapshot.getBase();
         }
         else {
             return '';

@@ -10,11 +10,12 @@
 - `cli/` contains the Rust-based CLI.
 
 ## Build, Test, and Development Commands
-- `npm install` installs dependencies (use Node `20.18.2` from `.nvmrc`).
+- `npm install` installs dependencies (use Node `22.22.3` from `.nvmrc`).
 - `npm run watch` builds and watches the client and extensions in dev mode.
 - `./scripts/code.sh` (macOS/Linux) or `./scripts/code.bat` (Windows) launches a
   Developer Mode window for manual testing.
 - `npm run buildreact` / `npm run watchreact` builds the Void React bundle.
+- **Native Modules (Windows)**: If native compilation fails due to missing Spectre mitigation libraries, patch the `.gyp`/`.gypi`/`binding.gyp` files in the failing dependencies (e.g., `node-pty`, `spdlog`, `sqlite3`) to set `"SpectreMitigation": "false"` and rebuild using `npm rebuild --target=34.3.2 --arch=x64 --dist-url=https://electronjs.org/headers`.
 
 ## Coding Style & Naming Conventions
 - Tabs are the default indentation; YAML and `package.json` use 2 spaces.

@@ -70,7 +70,7 @@ const IconArrowUp = ({ size, className = '' }: { size: number, className?: strin
 			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path
-				fill="black"
+				fill="currentColor"
 				fillRule="evenodd"
 				clipRule="evenodd"
 				d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z"
@@ -84,8 +84,8 @@ const IconSquare = ({ size, className = '' }: { size: number, className?: string
 	return (
 		<svg
 			className={className}
-			stroke="black"
-			fill="black"
+			stroke="currentColor"
+			fill="currentColor"
 			strokeWidth="0"
 			viewBox="0 0 24 24"
 			width={size}
@@ -337,19 +337,22 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 }) => {
+	const chipTriggerClass = `
+		text-[10px] text-void-fg-2 bg-void-bg-3 tracking-wide
+		border border-void-accent-brand/25 rounded-sm py-0.5 px-2
+		hover:border-void-accent-brand/45 hover:bg-void-bg-2-hover transition-colors
+	`
+
 	return (
 		<div
 			ref={divRef}
 			className={`
-				gap-x-1
-                flex flex-col p-2 relative input text-left shrink-0
-                rounded-md
-                bg-void-bg-1
-				transition-all duration-200
-				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
+				void-composer-surface
+				gap-2
+				flex flex-col p-2.5 relative input text-left shrink-0
 				max-h-[80vh] overflow-y-auto
-                ${className}
-            `}
+				${className}
+			`}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
@@ -365,7 +368,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			)}
 
 			{/* Input section */}
-			<div className="relative w-full">
+			<div className="relative w-full min-h-[52px]">
 				{children}
 
 				{/* Close button (X) if onClose is provided */}
@@ -380,20 +383,22 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 			</div>
 
-			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1'>
-				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
-						<ReasoningOptionSlider featureName={featureName} />
+			{showModelDropdown && (
+				<div className='w-full'>
+					<ReasoningOptionSlider featureName={featureName} />
+				</div>
+			)}
 
-						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
-							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
-						</div>
+			{/* Bottom row — prototype composer toolbar */}
+			<div className='flex flex-row justify-between items-center gap-2 flex-wrap pt-0.5 border-t border-void-line-1'>
+				{showModelDropdown && (
+					<div className='flex items-center flex-wrap gap-1.5 text-nowrap min-w-0'>
+						{featureName === 'Chat' && <ChatModeDropdown className={chipTriggerClass} />}
+						<ModelDropdown featureName={featureName} className={chipTriggerClass} />
 					</div>
 				)}
 
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 shrink-0 ml-auto">
 
 					{isStreaming && loadingIcon}
 
@@ -416,13 +421,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
-const DEFAULT_BUTTON_SIZE = 22;
 export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
 
 	return <button
 		type='button'
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+		className={`rounded-sm flex-shrink-0 flex-grow-0 flex items-center justify-center gap-1.5 px-3 h-8 text-[10px] font-semibold uppercase tracking-widest
+			${disabled
+				? 'cursor-not-allowed opacity-45 bg-void-bg-3 text-void-fg-3 border border-void-line-2'
+				: 'cursor-pointer text-white border border-void-accent-brand/50 bg-gradient-to-br from-[var(--void-accent)] to-[var(--void-accent-2)] hover:brightness-110 shadow-[0_0_20px_color-mix(in_srgb,var(--void-accent)_35%,transparent)]'}
 			${className}
 		`}
 		// data-tooltip-id='void-tooltip'
@@ -430,20 +436,21 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 		// data-tooltip-place='left'
 		{...props}
 	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<span className='void-chat-mono'>Transmit</span>
+		<IconArrowUp size={13} className="p-[1px] opacity-95" />
 	</button>
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+		className={`rounded-sm flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
+			h-8 w-8 border border-void-accent-brand/30 bg-void-bg-3 text-void-fg-1 hover:border-void-accent-brand/55 hover:bg-void-bg-2-hover
 			${className}
 		`}
 		type='button'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<IconSquare size={14} className="p-[5px]" />
 	</button>
 }
 
@@ -674,18 +681,18 @@ export const SelectedFiles = (
 						{/* summarybox */}
 						<div
 							className={`
-								flex items-center gap-1 relative
-								px-1
+								flex items-center gap-1.5 relative
+								px-2 py-0.5
 								w-fit h-fit
 								select-none
-								text-xs text-nowrap
+								text-[11px] text-nowrap void-chat-mono
 								border rounded-sm
-								${isThisSelectionProspective ? 'bg-void-bg-1 text-void-fg-3 opacity-80' : 'bg-void-bg-1 hover:brightness-95 text-void-fg-1'}
+								${isThisSelectionProspective ? 'bg-void-bg-3 text-void-fg-3 opacity-80' : 'bg-void-bg-3 hover:brightness-95 text-void-fg-1'}
 								${isThisSelectionProspective
-									? 'border-void-border-2'
-									: 'border-void-border-1'
+									? 'border-void-line-2'
+									: 'border-void-line-1'
 								}
-								hover:border-void-border-1
+								hover:border-void-line-2
 								transition-all duration-150
 							`}
 							onClick={() => {
@@ -1178,11 +1185,11 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
 
 	return <div
-		// align chatbubble accoridng to role
+		// align chatbubble (left block ≈ prototype user bubble)
 		className={`
-        relative ml-auto
+        relative mr-auto ml-0 max-w-full
         ${mode === 'edit' ? 'w-full max-w-full'
-				: mode === 'display' ? `self-end w-fit max-w-full whitespace-pre-wrap` : '' // user words should be pre
+				: mode === 'display' ? `self-start w-full max-w-full whitespace-pre-wrap` : ''
 			}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -1193,9 +1200,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		<div
 			// style chatbubble according to role
 			className={`
-            text-left rounded-lg max-w-full
+            text-left rounded-sm max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'p-2 flex flex-col bg-void-bg-1 text-void-fg-1 overflow-x-auto cursor-pointer' : ''
+					: mode === 'display' ? 'p-3 flex flex-col border border-void-line-2 border-l-2 border-l-void-accent-brand bg-void-bg-3 text-void-fg-1 overflow-x-auto cursor-pointer shadow-[0_0_0_1px_color-mix(in_srgb,var(--void-accent)_6%,transparent)]' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -2840,7 +2847,7 @@ const CommandBarInChat = () => {
 					select-none
 					flex w-full rounded-t-lg bg-void-bg-3
 					text-void-fg-3 text-xs text-nowrap
-					border-t border-l border-r border-zinc-300/10
+					border-t border-l border-r border-void-line-2
 
 					px-2 py-1
 					justify-between
@@ -2896,6 +2903,41 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 
 }
 
+const chatThreadTitleFromMessages = (messages: ChatMessage[]): string => {
+	const idx = messages.findIndex(m => m.role === 'user')
+	if (idx === -1) {
+		return 'New chat'
+	}
+	const msg = messages[idx]
+	if (msg.role !== 'user') {
+		return 'Chat'
+	}
+	const raw = (msg.displayContent || '').trim().replace(/\s+/g, ' ')
+	if (!raw) {
+		return 'New chat'
+	}
+	return raw.length > 52 ? `${raw.slice(0, 49)}…` : raw
+}
+
+const formatSessionSigil = (threadId: string): string => {
+	const compact = threadId.replace(/-/g, '')
+	return compact.slice(0, 10).toUpperCase()
+}
+
+const ChatThreadChrome = ({ title, threadId }: { title: string; threadId: string }) => (
+	<div className='void-chat-thread-chrome flex items-stretch shrink-0 min-h-[48px]'>
+		<div className='flex items-center pl-3 pr-2'>
+			<div className='void-chat-brand-icon' aria-hidden={true} />
+		</div>
+		<div className='flex flex-col justify-center min-w-0 flex-1 py-2 pr-3 pl-1 border-l border-void-line-1'>
+			<span className='void-chat-chrome-label'>transmission</span>
+			<span className='text-[12px] font-medium text-void-fg-1 leading-tight truncate'>{title}</span>
+		</div>
+		<div className='void-chat-mono flex flex-col justify-center px-3 border-l border-void-line-1 text-[10px] text-void-accent-brand tracking-[0.12em] shrink-0'>
+			{formatSessionSigil(threadId)}
+		</div>
+	</div>
+)
 
 export const SidebarChat = () => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -3035,8 +3077,8 @@ export const SidebarChat = () => {
 		scrollContainerRef={scrollContainerRef}
 		className={`
 			flex flex-col
-			px-4 py-4 space-y-4
-			w-full h-full
+			px-4 py-5 space-y-4
+			w-full h-full max-w-[min(680px,100%)] mx-auto
 			overflow-x-hidden
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
@@ -3097,7 +3139,7 @@ export const SidebarChat = () => {
 		<VoidInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			placeholder={`Input channel · @ file path ${keybindingString ? `· ${keybindingString} attach selection ` : ''}· Enter transmit`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -3112,7 +3154,7 @@ export const SidebarChat = () => {
 	const isLandingPage = previousMessages.length === 0
 
 
-	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-void-fg-3 select-none'>
+	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-void-fg-2 select-none'>
 		{[
 			'Summarize my codebase',
 			'How do types work in Rust?',
@@ -3120,7 +3162,7 @@ export const SidebarChat = () => {
 		].map((text, index) => (
 			<div
 				key={index}
-				className='py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100'
+				className='py-2 px-3 rounded-sm text-[13px] border border-void-accent-brand/20 bg-void-bg-3 hover:bg-void-bg-2-hover hover:border-void-accent-brand/40 cursor-pointer transition-colors'
 				onClick={() => onSubmit(text)}
 			>
 				{text}
@@ -3128,42 +3170,53 @@ export const SidebarChat = () => {
 		))}
 	</div>
 
-
-
-	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
-		<div className='px-4'>
-			<CommandBarInChat />
+	const composerFooterHint = (
+		<div className='text-center void-chat-mono text-[10px] text-void-fg-3 opacity-90 pt-1.5 tracking-wide'>
+			@ context · Enter transmit · Shift+Enter newline
+			{keybindingString ? <> · {keybindingString} selection</> : null}
 		</div>
-		<div className='px-2 pb-2'>
-			{inputChatArea}
-		</div>
-	</div>
+	)
 
-	const landingPageInput = <div>
-		<div className='pt-8'>
-			{inputChatArea}
+	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId} className='void-chat-dock shrink-0'>
+		<div className='max-w-[min(680px,100%)] mx-auto w-full px-3 pt-2 pb-1'>
+			<div className='px-0 pb-1'>
+				<CommandBarInChat />
+			</div>
+			<div className='pb-0.5'>
+				{inputChatArea}
+			</div>
+			{composerFooterHint}
 		</div>
 	</div>
 
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
+		className='w-full h-full max-h-full flex flex-col overflow-hidden'
 	>
-		<ErrorBoundary>
-			{landingPageInput}
-		</ErrorBoundary>
-
-		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Previous Threads</div>
-				<PastThreadsList />
-			</ErrorBoundary>
-			:
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
-				{initiallySuggestedPromptsHTML}
-			</ErrorBoundary>
-		}
+		<ChatThreadChrome title={chatThreadTitleFromMessages(previousMessages)} threadId={threadId} />
+		<div className='flex-1 min-h-0 overflow-y-auto'>
+			<div className='max-w-[min(680px,100%)] mx-auto w-full px-4 pt-4 pb-3'>
+				{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
+					<ErrorBoundary>
+						<div className='mb-2 text-void-accent-brand text-root select-none pointer-events-none text-[10px] uppercase tracking-[0.2em] void-chat-mono opacity-90'>Archive</div>
+						<PastThreadsList />
+					</ErrorBoundary>
+					:
+					<ErrorBoundary>
+						<div className='mb-2 text-void-accent-brand text-root select-none pointer-events-none text-[10px] uppercase tracking-[0.2em] void-chat-mono opacity-90'>Vectors</div>
+						{initiallySuggestedPromptsHTML}
+					</ErrorBoundary>
+				}
+			</div>
+		</div>
+		<div className='void-chat-dock shrink-0'>
+			<div className='max-w-[min(680px,100%)] mx-auto w-full px-3 py-2'>
+				<ErrorBoundary>
+					{inputChatArea}
+				</ErrorBoundary>
+				{composerFooterHint}
+			</div>
+		</div>
 	</div>
 
 
@@ -3184,7 +3237,7 @@ export const SidebarChat = () => {
 		ref={sidebarRef}
 		className='w-full h-full flex flex-col overflow-hidden'
 	>
-
+		<ChatThreadChrome title={chatThreadTitleFromMessages(previousMessages)} threadId={threadId} />
 		<ErrorBoundary>
 			{messagesHTML}
 		</ErrorBoundary>

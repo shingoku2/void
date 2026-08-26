@@ -5,7 +5,7 @@
 
 import type * as ts from 'typescript';
 import lazy from 'lazy.js';
-import { PassThrough, Writable, Readable } from 'stream';
+import { Writable } from 'stream';
 import through2 from 'through2';
 import File from 'vinyl';
 import sm from 'source-map';
@@ -454,7 +454,7 @@ module _nls {
 		}, null, sm.SourceMapConsumer.GENERATED_ORDER);
 
 		if (source) {
-			smg.setSourceContent(source, smc.sourceContentFor(source));
+			smg.setSourceContent(source, smc.sourceContentFor(source)!);
 		}
 
 		return JSON.parse(smg.toString());
@@ -478,7 +478,7 @@ module _nls {
 
 		const nlsKeys = localizeCalls.map(lc => parseLocalizeKeyOrValue(lc.key)).concat(localize2Calls.map(lc => parseLocalizeKeyOrValue(lc.key)));
 		const nlsMessages = localizeCalls.map(lc => parseLocalizeKeyOrValue(lc.value)).concat(localize2Calls.map(lc => parseLocalizeKeyOrValue(lc.value)));
-		const smc = new sm.SourceMapConsumer(sourcemap);
+		const smc = new sm.SourceMapConsumer(sourcemap) as any;
 		const positionFrom = mappedPositionFrom.bind(null, sourcemap.sources[0]);
 
 		// build patches
@@ -522,7 +522,7 @@ module _nls {
 
 		javascript = patchJavascript(patches, javascript);
 
-		sourcemap = patchSourcemap(patches, sourcemap, smc);
+		sourcemap = patchSourcemap(patches, sourcemap, smc as any);
 
 		return { javascript, sourcemap, nlsKeys, nlsMessages };
 	}

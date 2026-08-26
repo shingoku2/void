@@ -26,7 +26,7 @@ function fetchUrls(urls, options) {
     if (!Array.isArray(urls)) {
         urls = [urls];
     }
-    return stream_1.Readable.from(urls).pipe(through2_1.default.obj((data, cb) => {
+    return stream_1.Readable.from(urls).pipe(through2_1.default.obj((data, enc, cb) => {
         const url = [options.base, data].join('');
         fetchUrl(url, options).then(file => {
             cb(undefined, file);

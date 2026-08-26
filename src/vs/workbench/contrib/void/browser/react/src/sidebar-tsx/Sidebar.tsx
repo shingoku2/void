@@ -15,11 +15,11 @@ export const Sidebar = ({ className }: { className: string }) => {
 
 	const isDark = useIsDark()
 	return <div
-		className={`@@void-scope ${isDark ? 'dark' : ''}`}
+		className={`void-scope ${isDark ? 'dark' : ''}`}
 		style={{ width: '100%', height: '100%' }}
 	>
 		<div
-			// default background + text styles for sidebar
+			// default background + text styles for sidebar (panel base ≈ prototype void-bg-1)
 			className={`
 				w-full h-full
 				bg-void-bg-2

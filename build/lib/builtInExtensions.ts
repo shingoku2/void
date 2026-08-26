@@ -181,7 +181,7 @@ export function getBuiltInExtensions(): Promise<void> {
 	writeControlFile(control);
 
 	return new Promise((resolve, reject) => {
-		mergeStream(streams)
+		mergeStream(streams as any)
 			.on('error', reject)
 			.on('end', resolve);
 	});

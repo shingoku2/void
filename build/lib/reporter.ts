@@ -8,7 +8,7 @@ import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
 import fs from 'fs';
 import path from 'path';
-import { Transform, PassThrough } from 'stream';
+import { Transform } from 'stream';
 
 class ErrorLog {
 	constructor(public id: string) {
@@ -106,7 +106,7 @@ export function createReporter(id?: string): IReporter {
 		// Use a proper Transform stream that explicitly controls its lifecycle
 		const transform = new Transform({
 			objectMode: true,
-			transform(chunk, encoding, callback) {
+			transform(chunk, _encoding, callback) {
 				this.push(chunk);
 				callback();
 			},
@@ -137,7 +137,7 @@ export function createReporter(id?: string): IReporter {
 
 		// Create a wrapper that forces objectMode and passes through all data
 		const wrapped = through2.obj(
-			function(chunk, encoding, callback) {
+			function(chunk, _encoding, callback) {
 				this.push(chunk);
 				callback();
 			},

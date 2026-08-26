@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Void is a fork of VSCode (Electron-based), serving as the open-source Cursor alternative. The project adds AI agent capabilities on top of VSCode's editor. Node version `20.18.2` is required (see `.nvmrc`).
+Void is a fork of VSCode (Electron-based), serving as the open-source Cursor alternative. The project adds AI agent capabilities on top of VSCode's editor. Node version `22.22.3` is required (see `.nvmrc`).
 
 ## Build Commands
 
@@ -58,7 +58,7 @@ Apply creates **DiffZones** (line range with computed diffs). DiffZones can stre
 - Avoid paths with spaces to prevent build issues
 - For clean dev data: `--user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensions`
 - Press `Ctrl+R` (or `Cmd+R`) in the Dev window to reload changes
-- Windows: Visual Studio with "Desktop development with C++" workload is required for building
+- Windows: Visual Studio with "Desktop development with C++" workload is required for building. If you encounter errors about "Spectre-mitigated libraries are required", patch the `.gyp`/`.gypi`/`binding.gyp` files of the failing native modules (like `spdlog`, `sqlite3`, `node-pty`) to set `"SpectreMitigation": "false"` and run `npm rebuild --target=34.3.2 --arch=x64 --dist-url=https://electronjs.org/headers`
 
 ## Coding Rules (from .voidrules)
 

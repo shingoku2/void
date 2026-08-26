@@ -31,6 +31,88 @@
 
 	--void-ring-color: #007FD4;
 	--void-link-color: #007FD4;
+
+	/* HUD / futuristic chrome (cyan–violet, angular; theme-aware mix) */
+	--void-surface-deep: color-mix(in srgb, var(--vscode-sideBar-background) 78%, #030810 22%);
+	--void-line-1: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	--void-line-2: color-mix(in srgb, var(--vscode-widget-border) 80%, color-mix(in srgb, var(--void-accent) 18%, transparent));
+	--void-line-3: color-mix(in srgb, var(--vscode-foreground) 6%, var(--vscode-widget-border));
+	--void-accent: #22d3ee;
+	--void-accent-2: #a855f7;
+	--void-composer-glow:
+		0 0 0 1px color-mix(in srgb, var(--void-accent) 28%, transparent),
+		0 0 24px color-mix(in srgb, var(--void-accent) 12%, transparent),
+		0 12px 40px rgba(0, 0, 0, 0.35);
+	--void-font-mono: var(--vscode-editor-font-family, ui-monospace, Menlo, Consolas, monospace);
+}
+
+/* composer — sharp shell, neon edge */
+.void-composer-surface {
+	background: color-mix(in srgb, var(--void-bg-3) 88%, var(--void-surface-deep) 12%);
+	border: 1px solid color-mix(in srgb, var(--void-accent) 22%, var(--void-line-2));
+	border-radius: 6px;
+	box-shadow: var(--void-composer-glow);
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.void-composer-surface:focus-within {
+	border-color: color-mix(in srgb, var(--void-accent) 55%, var(--void-line-2));
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--void-accent) 45%, transparent),
+		0 0 32px color-mix(in srgb, var(--void-accent) 18%, transparent),
+		0 12px 48px rgba(0, 0, 0, 0.4);
+}
+
+.void-chat-thread-chrome {
+	background:
+		repeating-linear-gradient(
+			-12deg,
+			transparent,
+			transparent 6px,
+			color-mix(in srgb, var(--void-accent) 4%, transparent) 6px,
+			color-mix(in srgb, var(--void-accent) 4%, transparent) 7px
+		),
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--void-surface-deep) 35%, transparent),
+			color-mix(in srgb, var(--vscode-sideBar-background) 92%, var(--void-surface-deep) 8%)
+		);
+	border-bottom: 1px solid color-mix(in srgb, var(--void-accent) 15%, var(--void-line-2));
+}
+
+.void-chat-brand-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	clip-path: polygon(50% 0%, 100% 28%, 100% 72%, 50% 100%, 0% 72%, 0% 28%);
+	background: linear-gradient(155deg, var(--void-accent), var(--void-accent-2));
+	box-shadow:
+		0 0 16px color-mix(in srgb, var(--void-accent) 50%, transparent),
+		inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+}
+
+.void-chat-chrome-label {
+	font-size: 9px;
+	font-weight: 600;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: color-mix(in srgb, var(--void-accent) 92%, var(--void-fg-3));
+	opacity: 0.95;
+	margin-bottom: 2px;
+}
+
+.void-chat-mono {
+	font-family: var(--void-font-mono);
+	font-size: 11px;
+}
+
+.void-chat-dock {
+	border-top: 1px solid color-mix(in srgb, var(--void-accent) 12%, var(--void-line-2));
+	background: linear-gradient(
+		185deg,
+		color-mix(in srgb, var(--void-surface-deep) 40%, transparent) 0%,
+		var(--vscode-sideBar-background) 55%
+	);
 }
 
 .select-child-restyle select {

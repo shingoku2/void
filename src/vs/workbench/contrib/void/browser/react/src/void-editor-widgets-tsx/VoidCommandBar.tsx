@@ -27,7 +27,7 @@ export const VoidCommandBarMain = ({ uri, editor }: VoidCommandBarProps) => {
 	const isDark = useIsDark()
 
 	return <div
-		className={`@@void-scope ${isDark ? 'dark' : ''}`}
+		className={`void-scope ${isDark ? 'dark' : ''}`}
 	>
 		<VoidCommandBar uri={uri} editor={editor} />
 	</div>

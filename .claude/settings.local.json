@@ -97,10 +97,15 @@
       "Bash(.build/electron/Void.exe --force-color .)",
       "Bash(VSCODE_DEV=1 VSCODE_CLI=1 .build/electron/Void.exe . --disable-extension=vscode.vscode-api-tests)",
       "Bash(taskkill *)",
-"Bash(cmd //c \"set VSCODE_DEV=1&& set VSCODE_CLI=1&& .build\\\\\\\\electron\\\\\\\\Void.exe . --disable-extension=vscode.vscode-api-tests\")",
+      "Bash(cmd //c \"set VSCODE_DEV=1&& set VSCODE_CLI=1&& .build\\\\\\\\electron\\\\\\\\Void.exe . --disable-extension=vscode.vscode-api-tests\")",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(./scripts/code.bat --disable-extension=vscode.vscode-api-tests)",
+      "Bash(node_modules/.bin/tsc -p src/tsconfig.json --noEmit)",
+      "Bash(node_modules/.bin/tsc -p src/tsconfig.json)",
+      "Bash(node_modules/.bin/tsc -p src/tsconfig.json --noEmit --skipLibCheck)",
+      "Bash(grep -r \"extension\\\\|\\\\.ts$\\\\|\\\\.js$\" build/lib/tsb/builder.js)"
     ]
   }
 }

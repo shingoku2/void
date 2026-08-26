@@ -3,43 +3,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.duplex = duplex;
 exports.incremental = incremental;
 exports.debounce = debounce;
 exports.fixWin32DirectoryPermissions = fixWin32DirectoryPermissions;
@@ -59,6 +27,7 @@ exports.rebase = rebase;
 exports.filter = filter;
 exports.streamToPromise = streamToPromise;
 exports.getElectronVersion = getElectronVersion;
+const es_1 = __importDefault(require("event-stream"));
 const through2_1 = __importDefault(require("through2"));
 const debounce_1 = __importDefault(require("debounce"));
 const gulp_filter_1 = __importDefault(require("gulp-filter"));
@@ -66,42 +35,11 @@ const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const stream_1 = __importDefault(require("stream"));
-const _rimraf = __importStar(require("rimraf"));
+const { rimraf: _rimraf } = require('rimraf');
 const url_1 = require("url");
 const merge_stream_1 = __importDefault(require("merge-stream"));
 function duplex(input, output) {
-    const combined = new stream_1.default.Duplex({
-        objectMode: true,
-        write(chunk, enc, cb) {
-            if (input.write(chunk, enc)) {
-                cb();
-            }
-            else {
-                input.once('drain', cb);
-            }
-        },
-        final(cb) {
-            input.end();
-            cb();
-        },
-        read() { }
-    });
-    output.on('data', (chunk) => {
-        if (!combined.push(chunk)) {
-            if (typeof output.pause === 'function') {
-                output.pause();
-            }
-        }
-    });
-    combined.on('drain', () => {
-        if (typeof output.resume === 'function') {
-            output.resume();
-        }
-    });
-    output.on('end', () => combined.push(null));
-    output.on('error', err => combined.destroy(err));
-    input.on('error', err => combined.destroy(err));
-    return combined;
+    return es_1.default.duplex(input, output);
 }
 function readableFromArray(array) {
     const { PassThrough } = require('stream');
@@ -116,7 +54,7 @@ const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const NoCancellationToken = { isCancellationRequested: () => false };
 function incremental(streamProvider, initial, supportsCancellation) {
     const input = through2_1.default.obj();
-    const output = (0, through2_1.default)();
+    const output = through2_1.default.obj();
     let state = 'idle';
     let buffer = Object.create(null);
     const token = !supportsCancellation ? undefined : { isCancellationRequested: () => Object.keys(buffer).length > 0 };
@@ -125,7 +63,7 @@ function incremental(streamProvider, initial, supportsCancellation) {
         const stream = !supportsCancellation ? streamProvider() : streamProvider(isCancellable ? token : NoCancellationToken);
         input
             .pipe(stream)
-            .pipe((0, through2_1.default)(undefined, () => {
+            .pipe(through2_1.default.obj(undefined, () => {
             state = 'idle';
             eventuallyRun();
         }))
@@ -153,12 +91,12 @@ function incremental(streamProvider, initial, supportsCancellation) {
 }
 function debounce(task, duration = 500) {
     const input = through2_1.default.obj();
-    const output = (0, through2_1.default)();
+    const output = through2_1.default.obj();
     let state = 'idle';
     const run = () => {
         state = 'running';
         task()
-            .pipe((0, through2_1.default)(undefined, () => {
+            .pipe(through2_1.default.obj(undefined, () => {
             const shouldRunAgain = state === 'stale';
             state = 'idle';
             if (shouldRunAgain) {
@@ -341,7 +279,7 @@ function rimraf(dir) {
     const result = () => new Promise((c, e) => {
         let retries = 0;
         const retry = () => {
-            _rimraf.rimraf(dir, { maxBusyTries: 1 })
+            _rimraf(dir)
                 .then(() => c())
                 .catch((err) => {
                 if (err.code === 'ENOTEMPTY' && ++retries < 5) {
@@ -385,19 +323,15 @@ function rebase(count) {
     });
 }
 function filter(fn) {
-    const result = through2_1.default.obj(function (data, _enc, cb) {
+    const result = es_1.default.through(function (data) {
         if (fn(data)) {
-            this.push(data);
+            this.emit('data', data);
         }
         else {
             result.restore.push(data);
         }
-        cb();
-    }, function (cb) {
-        result.restore.end();
-        cb();
     });
-    result.restore = through2_1.default.obj();
+    result.restore = es_1.default.through();
     return result;
 }
 function streamToPromise(stream) {

@@ -131,7 +131,6 @@ function extractVsix() {
                         }
                         zipfile.openReadStream(entry, (err, readStream) => {
                             if (err) {
-                                zipfile.close(); // Release file descriptor on error
                                 finish(err);
                                 return;
                             }
@@ -154,7 +153,7 @@ function extractVsix() {
                         });
                     }
                 });
-                zipfile.on('error', (err) => { zipfile.close(); finish(err); });
+                zipfile.on('error', finish);
                 zipfile.readEntry();
             });
         }
@@ -374,7 +373,7 @@ function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) 
         hash.update(f.contents);
         const checksum = hash.digest('hex');
         if (checksum !== sha256) {
-            return callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
+            callback(new Error(`Checksum mismatch for ${vsixPath} (expected ${sha256}, actual ${checksum}))`));
         }
         else {
             callback(null, f);
@@ -408,15 +407,33 @@ function fromGithub({ name, version, repo, sha256, metadata }) {
  * platform that is being built.
  */
 const nativeExtensions = [
-    'microsoft-authentication',
+// 'microsoft-authentication', // REMOVED: Not needed for Void
 ];
 const excludedExtensions = [
+    // Test-only - never ship
     'vscode-api-tests',
     'vscode-colorize-tests',
     'vscode-colorize-perf-tests',
     'vscode-test-resolver',
     'ms-vscode.node-debug',
     'ms-vscode.node-debug2',
+    // Bloat - niche languages (users install what they need)
+    'bat',
+    'clojure',
+    'coffeescript',
+    'fsharp',
+    'groovy',
+    'julia',
+    'latex',
+    'lua',
+    'objective-c',
+    'perl',
+    'pug',
+    'ruby',
+    'shaderlab',
+    // Cloud/Telemetry - never ship to users
+    'microsoft-authentication',
+    'npm',
 ];
 const marketplaceWebExtensionsExclude = new Set([
     'ms-vscode.node-debug',
