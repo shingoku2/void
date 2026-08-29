@@ -10,7 +10,7 @@ import { ContextKeyExpr, IContextKey, IContextKeyService } from '../../../../pla
 import { ISCMService } from '../../scm/common/scm.js'
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
 import { IVoidSCMService } from '../common/voidSCMTypes.js'
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js'
+import { IVoidChannelService } from '../common/voidChannelService.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
 import { ILLMMessageService } from '../common/sendLLMMessageService.js'
@@ -51,7 +51,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
 	constructor(
 		@ISCMService private readonly scmService: ISCMService,
-		@IMainProcessService mainProcessService: IMainProcessService,
+		@IVoidChannelService channelService: IVoidChannelService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IConvertToLLMMessageService private readonly convertToLLMMessageService: IConvertToLLMMessageService,
 		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,
@@ -60,7 +60,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 	) {
 		super()
 		this.loadingContextKey = this.contextKeyService.createKey(loadingContextKey, false)
-		this.voidSCM = ProxyChannel.toService<IVoidSCMService>(mainProcessService.getChannel('void-channel-scm'))
+		this.voidSCM = ProxyChannel.toService<IVoidSCMService>(channelService.getChannel('void-channel-scm'))
 	}
 
 	override dispose() {

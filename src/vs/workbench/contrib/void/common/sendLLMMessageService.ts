@@ -8,7 +8,7 @@ import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMess
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { IVoidChannelService } from './voidChannelService.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -66,7 +66,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	}
 
 	constructor(
-		@IMainProcessService private readonly mainProcessService: IMainProcessService, // used as a renderer (only usable on client side)
+		@IVoidChannelService private readonly channelService: IVoidChannelService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		// @INotificationService private readonly notificationService: INotificationService,
 		@IMCPService private readonly mcpService: IMCPService,
@@ -75,7 +75,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		// const service = ProxyChannel.toService<LLMMessageChannel>(mainProcessService.getChannel('void-channel-sendLLMMessage')); // lets you call it like a service
 		// see llmMessageChannel.ts
-		this.channel = this.mainProcessService.getChannel('void-channel-llmMessage')
+		this.channel = this.channelService.getChannel('void-channel-llmMessage')
 
 		// .listen sets up an IPC channel and takes a few ms, so we set up listeners immediately and add hooks to them instead
 		// llm

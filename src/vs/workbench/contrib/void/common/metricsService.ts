@@ -6,7 +6,7 @@
 import { createDecorator, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { IVoidChannelService } from './voidChannelService.js';
 import { localize2 } from '../../../../nls.js';
 import { registerAction2, Action2 } from '../../../../platform/actions/common/actions.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
@@ -28,10 +28,10 @@ export class MetricsService implements IMetricsService {
 	private readonly metricsService: IMetricsService;
 
 	constructor(
-		@IMainProcessService mainProcessService: IMainProcessService // (only usable on client side)
+		@IVoidChannelService channelService: IVoidChannelService
 	) {
 		// creates an IPC proxy to use metricsMainService.ts
-		this.metricsService = ProxyChannel.toService<IMetricsService>(mainProcessService.getChannel('void-channel-metrics'));
+		this.metricsService = ProxyChannel.toService<IMetricsService>(channelService.getChannel('void-channel-metrics'));
 	}
 
 	// call capture on the channel

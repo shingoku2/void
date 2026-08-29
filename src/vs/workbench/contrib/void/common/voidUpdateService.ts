@@ -6,7 +6,7 @@
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { IVoidChannelService } from './voidChannelService.js';
 import { VoidCheckUpdateRespose } from './voidUpdateServiceTypes.js';
 
 
@@ -27,10 +27,10 @@ export class VoidUpdateService implements IVoidUpdateService {
 	private readonly voidUpdateService: IVoidUpdateService;
 
 	constructor(
-		@IMainProcessService mainProcessService: IMainProcessService, // (only usable on client side)
+		@IVoidChannelService channelService: IVoidChannelService,
 	) {
 		// creates an IPC proxy to use metricsMainService.ts
-		this.voidUpdateService = ProxyChannel.toService<IVoidUpdateService>(mainProcessService.getChannel('void-channel-update'));
+		this.voidUpdateService = ProxyChannel.toService<IVoidUpdateService>(channelService.getChannel('void-channel-update'));
 	}
 
 

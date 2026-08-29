@@ -14,6 +14,9 @@
 
 import './workbench.common.main.js';
 
+// Void requires Electron main-process channels and is not available in the web workbench.
+import './contrib/void/electron-sandbox/void.contribution.js';
+
 //#endregion
 
 

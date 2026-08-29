@@ -12,10 +12,6 @@ import './browser/workbench.contribution.js';
 
 //#endregion
 
-//#region --- Void
-import './contrib/void/browser/void.contribution.js'; // Void added this
-//#endregion
-
 //#region --- workbench actions
 
 import './browser/actions/textInputActions.js';

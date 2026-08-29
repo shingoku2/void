@@ -13,7 +13,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { IVoidChannelService } from './voidChannelService.js';
 import { MCPServerOfName, MCPConfigFileJSON, MCPServer, MCPToolCallParams, RawMCPToolCall, MCPServerEventResponse } from './mcpServiceTypes.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { InternalToolInfo } from './prompt/prompts.js';
@@ -80,11 +80,11 @@ class MCPService extends Disposable implements IMCPService {
 		@IPathService private readonly pathService: IPathService,
 		@IProductService private readonly productService: IProductService,
 		@IEditorService private readonly editorService: IEditorService,
-		@IMainProcessService private readonly mainProcessService: IMainProcessService,
+		@IVoidChannelService private readonly channelService: IVoidChannelService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 	) {
 		super();
-		this.channel = this.mainProcessService.getChannel('void-channel-mcp')
+		this.channel = this.channelService.getChannel('void-channel-mcp')
 
 
 		const onEvent = (e: MCPServerEventResponse) => {

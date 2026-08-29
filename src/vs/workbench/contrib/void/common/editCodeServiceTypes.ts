@@ -51,7 +51,7 @@ export type CtrlKZone = {
 
 	// _ means anything we don't include if we clone it
 	_mountInfo: null | {
-		textAreaRef: { current: HTMLTextAreaElement | null }
+		textAreaRef: { current: { focus(): void; value: string } | null }
 		dispose: () => void;
 		refresh: () => void;
 	}
