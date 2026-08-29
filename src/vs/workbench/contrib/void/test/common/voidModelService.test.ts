@@ -68,7 +68,7 @@ suite('VoidModelService', () => {
 			assert.ok(keysAfterOverflow.length < 100, `Should have fewer than 100 entries after overflow cleanup, got ${keysAfterOverflow.length}`);
 
 			// The extra file we just added should still be present
-			assert.ok((service as any)._modelRefOfURI['/test/extra.txt'], 'New entry should be present after cleanup');
+			assert.ok((service as any)._modelRefOfURI[extraUri.fsPath], 'New entry should be present after cleanup');
 
 			service.dispose();
 		});
@@ -134,14 +134,16 @@ suite('VoidModelService', () => {
 			);
 
 			// Add some entries
-			await service.initializeModel(URI.file('/test/dispose-all-1.txt'));
-			await service.initializeModel(URI.file('/test/dispose-all-2.txt'));
+			const firstUri = URI.file('/test/dispose-all-1.txt');
+			const secondUri = URI.file('/test/dispose-all-2.txt');
+			await service.initializeModel(firstUri);
+			await service.initializeModel(secondUri);
 
 			service.dispose();
 
 			// All entries should be disposed
-			assert.ok(disposedRefs.has('/test/dispose-all-1.txt'), 'First entry should be disposed');
-			assert.ok(disposedRefs.has('/test/dispose-all-2.txt'), 'Second entry should be disposed');
+			assert.ok(disposedRefs.has(firstUri.fsPath), 'First entry should be disposed');
+			assert.ok(disposedRefs.has(secondUri.fsPath), 'Second entry should be disposed');
 		});
 
 		test('initializeModel is idempotent - calling twice for same URI does not create duplicate', async () => {

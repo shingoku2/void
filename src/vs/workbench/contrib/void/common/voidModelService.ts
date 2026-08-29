@@ -61,7 +61,7 @@ export class VoidModelService extends Disposable implements IVoidModelService {
 
 	private _cleanUpIfNeeded() {
 		const keys = Object.keys(this._modelRefOfURI);
-		if (keys.length > this._maxModelRefs) {
+		if (keys.length >= this._maxModelRefs) {
 			// Remove oldest half of entries (simple LRU approximation)
 			const toRemove = keys.slice(0, Math.floor(keys.length / 2));
 			for (const key of toRemove) {

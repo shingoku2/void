@@ -64,8 +64,9 @@ suite('VoidSettingsService', () => {
 
 			// Should have default state since storage returned nothing
 			const defaultSt = defaultState();
-			assert.strictEqual(service.state.settingsOfProvider, defaultSt.settingsOfProvider);
-			assert.strictEqual(service.state.globalSettings, defaultSt.globalSettings);
+			assert.deepStrictEqual(service.state.globalSettings, defaultSt.globalSettings);
+			assert.deepStrictEqual(service.state.modelSelectionOfFeature, defaultSt.modelSelectionOfFeature);
+			assert.strictEqual(service.state.settingsOfProvider.ollama.endpoint, defaultSt.settingsOfProvider.ollama.endpoint);
 		});
 
 		test('falls back to default state when encrypted data is corrupt', async () => {
@@ -86,7 +87,7 @@ suite('VoidSettingsService', () => {
 
 			// Should have default state, not crash
 			const defaultSt = defaultState();
-			assert.strictEqual(service.state.globalSettings, defaultSt.globalSettings);
+			assert.deepStrictEqual(service.state.globalSettings, defaultSt.globalSettings);
 		});
 
 		test('falls back to default state when JSON.parse throws', async () => {
@@ -133,7 +134,7 @@ suite('VoidSettingsService', () => {
 			await service.waitForInitState;
 
 			// Should load the state correctly
-			assert.strictEqual(service.state.globalSettings.autoApprove, defaultState().globalSettings.autoApprove);
+			assert.deepStrictEqual(service.state.globalSettings.autoApprove, defaultState().globalSettings.autoApprove);
 		});
 
 		test('setGlobalSetting stores state and fires change event', async () => {

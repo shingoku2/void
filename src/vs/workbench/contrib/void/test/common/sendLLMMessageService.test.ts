@@ -39,8 +39,11 @@ function createMockChannel() {
 			return undefined;
 		}
 	};
+	const mockMainProcessService = {
+		getChannel: () => mockChannel
+	};
 
-	return { mockChannel, emitters: { onTextEmitter, onFinalMessageEmitter, onErrorEmitter } };
+	return { mockMainProcessService, emitters: { onTextEmitter, onFinalMessageEmitter, onErrorEmitter } };
 }
 
 suite('LLMMessageService', () => {
@@ -48,7 +51,7 @@ suite('LLMMessageService', () => {
 	suite('_clearChannelHooks abort handler cleanup', () => {
 
 		test('clears all hook types when abort is called', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -59,7 +62,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -90,7 +93,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('calling abort twice does not throw', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -101,7 +104,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -122,7 +125,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('abort does not affect other request hooks', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -133,7 +136,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -158,7 +161,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('list hooks are also cleared by _clearChannelHooks', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -169,7 +172,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -197,7 +200,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('onFinalMessage event clears hooks automatically', async () => {
-			const { mockChannel, emitters } = createMockChannel();
+			const { mockMainProcessService, emitters } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -208,7 +211,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -231,7 +234,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('onError event clears hooks automatically', async () => {
-			const { mockChannel, emitters } = createMockChannel();
+			const { mockMainProcessService, emitters } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -242,7 +245,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -269,7 +272,7 @@ suite('LLMMessageService', () => {
 	suite('sendLLMMessage validation', () => {
 
 		test('returns null and calls onError when no model/provider selected', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {}, modelSelection: null } as any
@@ -280,7 +283,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
@@ -309,7 +312,7 @@ suite('LLMMessageService', () => {
 		});
 
 		test('returns null and calls onError when no messages provided for chatMessages', async () => {
-			const { mockChannel } = createMockChannel();
+			const { mockMainProcessService } = createMockChannel();
 
 			const mockVoidSettingsService: Partial<IVoidSettingsService> = {
 				state: { settingsOfProvider: {} } as any
@@ -320,7 +323,7 @@ suite('LLMMessageService', () => {
 			};
 
 			const service = new LLMMessageService(
-				mockChannel as any,
+				mockMainProcessService as any,
 				mockVoidSettingsService as any,
 				mockMCPService as any
 			);
